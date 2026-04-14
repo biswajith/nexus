@@ -12,6 +12,9 @@ interface WsMessage {
 
 type WsStatus = 'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'error';
 
+/**
+ * Panel for connecting to a WebSocket URL, sending messages, and viewing sent/received traffic with connection status.
+ */
 export function WebSocketPanel() {
   const [url, setUrl] = useState('ws://localhost:8080');
   const [status, setStatus] = useState<WsStatus>('idle');

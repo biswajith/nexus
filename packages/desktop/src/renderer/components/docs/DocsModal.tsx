@@ -9,6 +9,9 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Modal to generate HTML or Markdown API docs from a collection, with preview, download, and copy.
+ */
 export function DocsModal({ open, onClose }: Props) {
   const [selectedCollection, setSelectedCollection] = useState('');
   const [format, setFormat] = useState<DocFormat>('html');

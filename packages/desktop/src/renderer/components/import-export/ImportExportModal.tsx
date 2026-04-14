@@ -23,6 +23,9 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Modal with Import and Export tabs: import from files or cURL, export collections as Nexus or Postman JSON.
+ */
 export function ImportExportModal({ open, onClose }: Props) {
   const [tab, setTab] = useState<ModalTab>('import');
 

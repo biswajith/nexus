@@ -46,6 +46,9 @@ interface ServerInfo {
 
 type ServerTab = 'tools' | 'resources' | 'prompts';
 
+/**
+ * Panel for connecting to an MCP server (stdio or HTTP), browsing tools/resources/prompts, and invoking tools with arguments.
+ */
 export function McpPanel() {
   const [transportType, setTransportType] = useState<TransportType>('stdio');
   const [command, setCommand] = useState('');

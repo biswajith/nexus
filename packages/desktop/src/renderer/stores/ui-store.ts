@@ -28,6 +28,7 @@ interface UiState {
   setActivePanel: (panel: ActivePanel) => void;
 }
 
+/** Layout and chrome: sidebar, console panel, response/body views, theme, and the active main panel (HTTP, runner, etc.). */
 export const useUiStore = create<UiState>((set) => ({
   sidebarTab: 'collections',
   sidebarWidth: 300,

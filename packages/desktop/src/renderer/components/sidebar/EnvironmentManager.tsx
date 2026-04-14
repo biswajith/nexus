@@ -8,6 +8,11 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Full-screen modal to list, create, edit, activate, and delete environments.
+ * @param props.open - When true, the overlay is shown and environments refresh.
+ * @param props.onClose - Called when the user dismisses the modal.
+ */
 export function EnvironmentManager({ open, onClose }: Props) {
   const environments = useEnvironmentStore((s) => s.environments);
   const fetchEnvironments = useEnvironmentStore((s) => s.fetchEnvironments);
@@ -200,6 +205,12 @@ interface EnvironmentEditorProps {
   onUpdate: (id: string, updates: Partial<NexusEnvironment>) => Promise<void>;
 }
 
+/**
+ * Detail view for one environment: editable name and variable table with save.
+ * @param props.env - Environment being edited.
+ * @param props.onBack - Navigates back to the environment list.
+ * @param props.onUpdate - Persists partial updates (e.g. name and variables).
+ */
 function EnvironmentEditor({ env, onBack, onUpdate }: EnvironmentEditorProps) {
   const [name, setName] = useState(env.name);
   const [variables, setVariables] = useState<Variable[]>(env.variables);

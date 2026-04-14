@@ -46,6 +46,7 @@ interface RunnerState {
   reset: () => void;
 }
 
+/** Collection runner status, iteration progress, per-request results, and run summary/error. */
 export const useRunnerStore = create<RunnerState>((set) => ({
   status: 'idle',
   currentIteration: 0,

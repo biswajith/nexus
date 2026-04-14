@@ -16,6 +16,7 @@ interface ConsoleState {
   getFilteredEntries: () => ConsoleEntry[];
 }
 
+/** Console log buffer, level/source filters, search, and derived filtered entries. */
 export const useConsoleStore = create<ConsoleState>((set, get) => ({
   entries: [],
   filterLevel: null,

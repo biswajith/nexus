@@ -12,6 +12,9 @@ interface TimingWaterfallProps {
   };
 }
 
+/**
+ * Visualizes request timing as a waterfall: total duration plus labeled segments (DNS, TCP, TLS, TTFB, download) as bars.
+ */
 export function TimingWaterfall({ timing }: TimingWaterfallProps) {
   const segments = buildTimingWaterfall(timing);
   const maxMs = timing.total || 1;

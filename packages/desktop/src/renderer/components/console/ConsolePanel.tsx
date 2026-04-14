@@ -15,6 +15,9 @@ const SOURCE_LABELS: Record<string, string> = {
   system: 'Sys',
 };
 
+/**
+ * Console drawer UI: filterable log stream with level chips, search, and clear.
+ */
 export function ConsolePanel() {
   const getFilteredEntries = useConsoleStore((s) => s.getFilteredEntries);
   const searchTerm = useConsoleStore((s) => s.searchTerm);

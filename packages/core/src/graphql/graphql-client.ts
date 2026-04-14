@@ -38,11 +38,19 @@ export interface SubscriptionMessage {
   errors?: Array<{ message: string }>;
 }
 
+/**
+ * HTTP GraphQL client with introspection caching and optional WebSocket subscriptions, built on `EventEmitter`.
+ */
 export class GraphQLClient extends EventEmitter {
   private schemas = new Map<string, GraphQLSchema>();
   private subscriptionClient: GqlWsClient | null = null;
   private subscriptionUnsubscribe: (() => void) | null = null;
 
+  /**
+   * Sends a GraphQL request over HTTP POST and returns the parsed body with timing and response headers.
+   * @param opts - Endpoint URL, query, and optional variables, operation name, and request headers.
+   * @returns The GraphQL payload, errors (if any), HTTP status, elapsed time, and response headers.
+   */
   async send(opts: GraphQLRequestOptions): Promise<GraphQLResponse> {
     const startTime = Date.now();
     const body = JSON.stringify({
@@ -91,6 +99,12 @@ export class GraphQLClient extends EventEmitter {
     };
   }
 
+  /**
+   * Runs an introspection query against the endpoint and returns a `GraphQLSchema`, caching by URL.
+   * @param url - GraphQL HTTP endpoint URL.
+   * @param headers - Optional headers to send with the introspection request.
+   * @returns A client schema built from the introspection result.
+   */
   async introspect(url: string, headers?: Record<string, string>): Promise<GraphQLSchema> {
     const cached = this.schemas.get(url);
     if (cached) return cached;
@@ -114,6 +128,11 @@ export class GraphQLClient extends EventEmitter {
     return schema;
   }
 
+  /**
+   * Drops cached introspection schemas for a single URL or for all URLs when `url` is omitted.
+   * @param url - Optional endpoint URL whose cache entry to remove.
+   * @returns void
+   */
   clearSchemaCache(url?: string): void {
     if (url) {
       this.schemas.delete(url);
@@ -122,6 +141,11 @@ export class GraphQLClient extends EventEmitter {
     }
   }
 
+  /**
+   * Opens a WebSocket subscription (replacing any prior one) and emits subscription lifecycle events.
+   * @param opts - HTTP(S) URL (converted to ws), query, optional variables, operation name, and connection headers.
+   * @returns void
+   */
   subscribe(opts: {
     url: string;
     query: string;
@@ -168,6 +192,10 @@ export class GraphQLClient extends EventEmitter {
     );
   }
 
+  /**
+   * Stops the active subscription and disposes the underlying `graphql-ws` client.
+   * @returns void
+   */
   unsubscribe(): void {
     if (this.subscriptionUnsubscribe) {
       this.subscriptionUnsubscribe();
@@ -179,6 +207,10 @@ export class GraphQLClient extends EventEmitter {
     }
   }
 
+  /**
+   * Fully tears down subscriptions and clears all cached schemas for this client.
+   * @returns void
+   */
   dispose(): void {
     this.unsubscribe();
     this.schemas.clear();

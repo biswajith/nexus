@@ -18,6 +18,7 @@ const AUTH_TYPES: { value: AuthType; label: string }[] = [
   { value: 'aws-sig-v4', label: 'AWS Signature v4' },
 ];
 
+/** Form to configure request authentication type and type-specific credentials. */
 export function AuthEditor({ auth, onChange }: AuthEditorProps) {
   const setType = (type: AuthType) => onChange({ ...auth, type });
   const setField = (key: string, value: string) => onChange({ ...auth, [key]: value });
@@ -134,6 +135,7 @@ export function AuthEditor({ auth, onChange }: AuthEditorProps) {
   );
 }
 
+/** Single labeled text (or password) field, with optional show/hide for secret values. */
 function FieldRow({
   label,
   value,

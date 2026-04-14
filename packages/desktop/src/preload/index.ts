@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+/** Preload bridge exposing IPC-backed methods to the renderer process. */
 const api = {
   http: {
     send: (opts: unknown) => ipcRenderer.invoke('http:send', opts),

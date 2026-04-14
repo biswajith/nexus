@@ -9,6 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * Creates the main `BrowserWindow`, loads the app URL or bundled HTML, and clears `mainWindow` when the window closes.
+ * @returns void
+ */
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,

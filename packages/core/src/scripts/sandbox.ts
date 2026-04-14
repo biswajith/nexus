@@ -69,10 +69,18 @@ export interface VariableChange {
   value?: string;
 }
 
+/**
+ * Variable scope that records set/unset operations for merging into {@link ScriptResult.variableChanges}.
+ */
 class TrackedScope implements VariableScopeAccess {
   private data: Map<string, string>;
   changes: VariableChange[] = [];
 
+  /**
+   * Seeds the scope from enabled variables only.
+   * @param scopeName - Label stored on each recorded change.
+   * @param variables - Initial variable definitions.
+   */
   constructor(
     private scopeName: string,
     variables: Variable[],
@@ -82,20 +90,38 @@ class TrackedScope implements VariableScopeAccess {
     );
   }
 
+  /**
+   * Reads a variable from this scope.
+   * @param key - Variable name.
+   * @returns The value, or undefined if absent.
+   */
   get(key: string): string | undefined {
     return this.data.get(key);
   }
 
+  /**
+   * Sets a variable and records a `set` change.
+   * @param key - Variable name.
+   * @param value - New string value.
+   */
   set(key: string, value: string): void {
     this.data.set(key, value);
     this.changes.push({ scope: this.scopeName, action: 'set', key, value });
   }
 
+  /**
+   * Deletes a variable and records an `unset` change.
+   * @param key - Variable name.
+   */
   unset(key: string): void {
     this.data.delete(key);
     this.changes.push({ scope: this.scopeName, action: 'unset', key });
   }
 
+  /**
+   * Snapshot of current variables as a plain object.
+   * @returns Copy of all key/value pairs in this scope.
+   */
   toObject(): Record<string, string> {
     const obj: Record<string, string> = {};
     for (const [k, v] of this.data) {
@@ -105,13 +131,25 @@ class TrackedScope implements VariableScopeAccess {
   }
 }
 
+/**
+ * Runs Nexus scripts in an isolated Node `vm` context with a constrained global and `nx` API surface.
+ */
 export class ScriptSandbox {
   private timeoutMs: number;
 
+  /**
+   * @param timeoutMs - Max milliseconds for `vm.Script` execution (default 30_000).
+   */
   constructor(timeoutMs = 30_000) {
     this.timeoutMs = timeoutMs;
   }
 
+  /**
+   * Executes script text, capturing logs, tests, variable deltas, and optional request mutations.
+   * @param script - JavaScript source to run.
+   * @param context - Scopes, request, and optional response/visualizer exposed as `nx`.
+   * @returns Aggregated script outcome; `error` is set when execution throws.
+   */
   execute(script: string, context: ScriptContext): ScriptResult {
     const logs: LogEntry[] = [];
     const assertionEngine = new AssertionEngine();
@@ -275,6 +313,12 @@ export class ScriptSandbox {
     return result;
   }
 
+  /**
+   * Factory for {@link TrackedScope} instances used to back `ScriptContext` variable scopes.
+   * @param scopeName - Label recorded on each variable change from this scope.
+   * @param variables - Initial variable definitions.
+   * @returns A new tracked scope.
+   */
   createTrackedScope(scopeName: string, variables: Variable[]): TrackedScope {
     return new TrackedScope(scopeName, variables);
   }

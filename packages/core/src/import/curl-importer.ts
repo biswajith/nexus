@@ -1,6 +1,15 @@
 import type { NexusRequest, HttpMethod, KeyValuePair, RequestBody } from '../types/index.js';
 
+/**
+ * Parses curl command strings into {@link NexusRequest} objects for use in Nexus.
+ */
 export class CurlImporter {
+  /**
+   * Parses a curl command into method, URL, headers, body, and query parameters.
+   *
+   * @param curlCommand - Raw curl command text (line continuations are normalized to spaces).
+   * @returns A {@link NexusRequest} built from the parsed flags and URL.
+   */
   import(curlCommand: string): NexusRequest {
     const normalized = curlCommand
       .replace(/\\\n/g, ' ')
@@ -126,6 +135,12 @@ export class CurlImporter {
     };
   }
 
+  /**
+   * Splits the command into whitespace-separated tokens while honoring quoted segments.
+   *
+   * @param input - The command string to split (already normalized for line breaks).
+   * @returns Token strings in order, without the surrounding quote delimiters.
+   */
   private tokenize(input: string): string[] {
     const tokens: string[] = [];
     let current = '';

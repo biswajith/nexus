@@ -14,6 +14,9 @@ type ViewMode = 'pretty' | 'raw' | 'preview';
 
 const LARGE_BODY_THRESHOLD = 500_000;
 
+/**
+ * Displays the response body with pretty, raw, or preview modes, optional truncation for large payloads, and copy.
+ */
 export function ResponseBody({ response }: ResponseBodyProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('pretty');
   const [showFull, setShowFull] = useState(false);

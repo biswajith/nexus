@@ -21,6 +21,9 @@ interface VirtualListProps<T> {
   overscanCount?: number;
 }
 
+/**
+ * Virtualized list using react-window to render only visible rows for large item sets.
+ */
 export function VirtualList<T>({
   items,
   rowHeight,

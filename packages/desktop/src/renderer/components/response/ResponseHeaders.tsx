@@ -4,6 +4,9 @@ interface ResponseHeadersProps {
   headers: Record<string, string | string[]>;
 }
 
+/**
+ * Renders a sortable table of response header names and values (multi-value headers joined for display).
+ */
 export function ResponseHeaders({ headers }: ResponseHeadersProps) {
   const entries = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b));
 

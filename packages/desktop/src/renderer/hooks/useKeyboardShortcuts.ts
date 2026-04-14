@@ -15,10 +15,19 @@ interface ShortcutActions {
 
 const isMac = navigator.platform.toUpperCase().includes('MAC');
 
+/**
+ * Returns whether the platform primary modifier (⌘ on macOS, Ctrl elsewhere) is active.
+ * @param e - Keyboard event to inspect.
+ * @returns `true` if Meta (macOS) or Ctrl (non-Mac) is pressed.
+ */
 function isModKey(e: KeyboardEvent): boolean {
   return isMac ? e.metaKey : e.ctrlKey;
 }
 
+/**
+ * Focuses the environment `<select>` in the toolbar if it exists in the document.
+ * @returns void
+ */
 function focusEnvironmentSelectorEl(): void {
   document.querySelector<HTMLElement>('[aria-label="Select environment"]')?.focus();
 }
@@ -31,6 +40,11 @@ const PANEL_KEYS: Record<string, ActivePanel> = {
   '5': 'runner',
 };
 
+/**
+ * Registers global `keydown` shortcuts (Escape and modifier combos) using the given action callbacks.
+ * @param actions - Optional handlers for command palette, URL bar, Escape, environment selector, and settings.
+ * @returns void
+ */
 export function useKeyboardShortcuts(actions: ShortcutActions = {}) {
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
@@ -125,6 +139,12 @@ export function useKeyboardShortcuts(actions: ShortcutActions = {}) {
   }, []);
 }
 
+/**
+ * Builds a display string for a keyboard shortcut (⌘/Ctrl, optional Shift, and the key).
+ * @param key - Main key character or name (e.g. `"k"`, `"e"`).
+ * @param shift - When `true`, includes Shift in the formatted shortcut.
+ * @returns Platform-appropriate shortcut text (e.g. `⌘K` on Mac, `Ctrl+K` elsewhere).
+ */
 export function formatShortcut(key: string, shift = false): string {
   const mod = isMac ? '⌘' : 'Ctrl';
   const parts = [mod];

@@ -19,6 +19,7 @@ const BODY_MODES: { value: BodyMode; label: string }[] = [
   { value: 'graphql', label: 'GraphQL' },
 ];
 
+/** Selects body mode and renders the matching editor (raw text, form fields, GraphQL, etc.). */
 export function BodyEditor({ body, onChange }: BodyEditorProps) {
   const setMode = (mode: BodyMode) => {
     onChange({ ...body, mode });

@@ -28,10 +28,16 @@ interface CollectionState {
   toggleFolder: (id: string) => void;
 }
 
+/**
+ * Returns the last `/`-separated segment of a path (the directory or file name).
+ * @param p - A path string using `/` as the separator.
+ * @returns The final segment, or `p` if splitting yields nothing.
+ */
 function dirNameFromPath(p: string): string {
   return p.split('/').pop() ?? p;
 }
 
+/** Loaded collections, tree selection/expansion, and collection/request CRUD via the main process. */
 export const useCollectionStore = create<CollectionState>((set, get) => ({
   collections: [],
   loadedCollections: new Map(),

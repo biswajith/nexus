@@ -8,6 +8,7 @@ import styles from './RequestPanel.module.css';
 const MIN_PANE = 120;
 const DEFAULT_SPLIT = 0.45;
 
+/** Main request workspace: tabs, resizable request builder and response viewer, or empty state. */
 export function RequestPanel() {
   const tabs = useRequestStore((s) => s.tabs);
   const activeTabId = useRequestStore((s) => s.activeTabId);

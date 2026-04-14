@@ -26,6 +26,10 @@ interface ResponseViewerProps {
   };
 }
 
+/**
+ * Renders the HTTP response panel: status and timing summary, tab strip (body, headers, tests, timing, visualize),
+ * and the active tab’s content for the current request tab.
+ */
 export function ResponseViewer({ tab }: ResponseViewerProps) {
   const responseTab = useUiStore((s) => s.responseTab);
   const setResponseTab = useUiStore((s) => s.setResponseTab);

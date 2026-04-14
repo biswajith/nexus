@@ -3,6 +3,9 @@ import { CollectionTree } from './CollectionTree.js';
 import { HistoryList } from './HistoryList.js';
 import styles from './Sidebar.module.css';
 
+/**
+ * Left sidebar with Collections / History tabs; shows the collection tree or history list for the active tab.
+ */
 export function Sidebar() {
   const sidebarTab = useUiStore((s) => s.sidebarTab);
   const setSidebarTab = useUiStore((s) => s.setSidebarTab);

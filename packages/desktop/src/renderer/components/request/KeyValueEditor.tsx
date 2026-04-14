@@ -8,6 +8,7 @@ interface KeyValueEditorProps {
   valuePlaceholder?: string;
 }
 
+/** Table-style editor for key/value pairs with enable toggles, descriptions, and add/remove rows. */
 export function KeyValueEditor({
   pairs,
   onChange,

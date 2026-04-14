@@ -54,15 +54,27 @@ export interface RunSummary {
   aborted: boolean;
 }
 
+/**
+ * Executes a Nexus collection's HTTP requests in order with variable resolution, scripts, auth, and lifecycle events via `EventEmitter`.
+ */
 export class CollectionRunner extends EventEmitter {
   private sandbox: ScriptSandbox;
   private aborted = false;
 
+  /**
+   * Creates a runner with an isolated script sandbox for pre/post-request code.
+   * @param scriptTimeout - Maximum time in milliseconds a single script may run.
+   */
   constructor(scriptTimeout = 30_000) {
     super();
     this.sandbox = new ScriptSandbox(scriptTimeout);
   }
 
+  /**
+   * Runs the collection for the configured iterations and options, emitting progress events and returning an aggregate summary.
+   * @param config - Collection, variables, filters, timing, and run behavior (e.g. stop on error).
+   * @returns Summary counts, timing, per-request results, and whether the run was aborted.
+   */
   async run(config: RunConfig): Promise<RunSummary> {
     this.aborted = false;
     const startTime = Date.now();
@@ -144,10 +156,24 @@ export class CollectionRunner extends EventEmitter {
     return summary;
   }
 
+  /**
+   * Signals the current run to stop cooperatively at the next iteration or request boundary.
+   * @returns void
+   */
   cancel(): void {
     this.aborted = true;
   }
 
+  /**
+   * Resolves variables, runs pre/post scripts, applies auth, sends the HTTP request, and collects tests and logs.
+   * @param req - Request to execute.
+   * @param collection - Parent collection for inherited auth and shared scripts.
+   * @param envVars - Environment variables for resolution and sandbox scopes.
+   * @param collVars - Collection variables for resolution and sandbox scopes.
+   * @param globalVars - Global variables for resolution and sandbox scopes.
+   * @param dataVars - Data-row variables merged into the environment for this iteration.
+   * @returns Per-request result including status, timing, tests, script logs, and optional error.
+   */
   private async executeRequest(
     req: NexusRequest,
     collection: NexusCollection,
@@ -277,6 +303,12 @@ export class CollectionRunner extends EventEmitter {
     }
   }
 
+  /**
+   * Builds the ordered list of requests to run, optionally restricted to specific ids.
+   * @param collection - Collection whose folder tree defines order.
+   * @param requestIds - When non-empty, only requests whose id is listed are included.
+   * @returns Flat request queue in traversal order.
+   */
   private buildRequestQueue(collection: NexusCollection, requestIds?: string[]): NexusRequest[] {
     const allRequests = this.flattenRequests(collection.items);
     if (!requestIds || requestIds.length === 0) return allRequests;
@@ -284,6 +316,11 @@ export class CollectionRunner extends EventEmitter {
     return allRequests.filter((r) => idSet.has(r.id));
   }
 
+  /**
+   * Depth-first flattens folders into a linear list of requests.
+   * @param items - Requests and folders at the current tree level.
+   * @returns All nested requests in encounter order.
+   */
   private flattenRequests(items: (NexusRequest | NexusFolder)[]): NexusRequest[] {
     const result: NexusRequest[] = [];
     for (const item of items) {
@@ -296,6 +333,11 @@ export class CollectionRunner extends EventEmitter {
     return result;
   }
 
+  /**
+   * Returns a promise that resolves after a fixed delay (used between requests).
+   * @param ms - Milliseconds to wait.
+   * @returns Promise that resolves when the delay elapses.
+   */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }

@@ -64,6 +64,9 @@ function nxAutoComplete(context: CompletionContext) {
   };
 }
 
+/**
+ * CodeMirror editor for Nexus scripts: JavaScript syntax, dark theme, and nx.* autocomplete.
+ */
 export function ScriptEditor({ value, onChange, placeholder }: ScriptEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);

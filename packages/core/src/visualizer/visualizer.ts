@@ -3,26 +3,49 @@ export interface VisualizerConfig {
   data: unknown;
 }
 
+/** Holds template and data for rendering Mustache-like HTML snippets and full preview documents. */
 export class Visualizer {
   private config: VisualizerConfig | null = null;
 
+  /**
+   * Stores the template string and data context for later {@link Visualizer.render} calls.
+   * @param template - Source string with `{{}}`, `{{{}}}`, `{{#each}}`, `{{#if}}`, and `{{#unless}}` blocks.
+   * @param data - Object (or compatible value) used as the interpolation context.
+   * @returns Nothing.
+   */
   set(template: string, data: unknown): void {
     this.config = { template, data };
   }
 
+  /**
+   * Returns the last configuration passed to {@link Visualizer.set}, or `null` if cleared or never set.
+   * @returns The current template and data, or `null` when nothing is configured.
+   */
   getConfig(): VisualizerConfig | null {
     return this.config;
   }
 
+  /**
+   * Removes any stored template and data so subsequent renders return `null` until {@link Visualizer.set} is called again.
+   * @returns Nothing.
+   */
   clear(): void {
     this.config = null;
   }
 
+  /**
+   * Renders the configured template against the stored data.
+   * @returns The rendered HTML fragment, or `null` when no configuration is set.
+   */
   render(): string | null {
     if (!this.config) return null;
     return renderTemplate(this.config.template, this.config.data);
   }
 
+  /**
+   * Like {@link Visualizer.render}, but wraps the fragment in a full HTML document with built-in dark-theme styles.
+   * @returns A complete HTML page string, or `null` when there is nothing to render.
+   */
   renderWithWrapper(): string | null {
     const body = this.render();
     if (!body) return null;
@@ -50,10 +73,22 @@ export class Visualizer {
   }
 }
 
+/**
+ * Renders a template string using the given context object.
+ * @param template - Template source to process.
+ * @param context - Root value for variable lookup (coerced to a record for processing).
+ * @returns The fully expanded HTML string.
+ */
 function renderTemplate(template: string, context: unknown): string {
   return processTemplate(template, context as Record<string, unknown>);
 }
 
+/**
+ * Recursively expands `{{#each}}`, `{{#if}}`, `{{#unless}}`, triple-brace raw output, and escaped `{{}}` placeholders.
+ * @param tmpl - Template text still containing any supported constructs.
+ * @param ctx - Current scope (may include `@index`, `this`, and nested keys from `each`).
+ * @returns The template with all recognized constructs resolved for this scope.
+ */
 function processTemplate(tmpl: string, ctx: Record<string, unknown>): string {
   let result = tmpl;
 
@@ -106,6 +141,12 @@ function processTemplate(tmpl: string, ctx: Record<string, unknown>): string {
   return result;
 }
 
+/**
+ * Walks a simple dotted path on a context object; supports `.` and `this` as the current item in `each`.
+ * @param ctx - Object (or scope record) to read from.
+ * @param path - Property path such as `foo` or `foo.bar`, or `.` / `this`.
+ * @returns The value at the path, or `undefined` if missing or traversal fails.
+ */
 function resolve(ctx: Record<string, unknown>, path: string): unknown {
   if (path === '.' || path === 'this') return ctx['this'] ?? ctx;
   const parts = path.split('.');
@@ -117,11 +158,21 @@ function resolve(ctx: Record<string, unknown>, path: string): unknown {
   return current;
 }
 
+/**
+ * Determines whether `{{#if}}` / `{{#unless}}` should treat a value as true (non-empty arrays count as true).
+ * @param val - Value from the template context.
+ * @returns `true` if the value should show the `if` branch (or hide `unless`).
+ */
 function isTruthy(val: unknown): boolean {
   if (Array.isArray(val)) return val.length > 0;
   return !!val;
 }
 
+/**
+ * Escapes `&`, `<`, `>`, and `"` so interpolated text is safe inside HTML.
+ * @param str - Raw string from the template context.
+ * @returns The same text with HTML-special characters replaced by entities.
+ */
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')

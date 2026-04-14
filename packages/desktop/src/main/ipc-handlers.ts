@@ -70,6 +70,12 @@ interface SendRequestPayload {
   globalVars?: Variable[];
 }
 
+/**
+ * Registers all `ipcMain.handle` channels so the renderer can invoke `@nexus/core` services on the main process.
+ *
+ * @param ipcMain - The Electron main-process `ipcMain` instance to register handlers on.
+ * @returns void
+ */
 export function registerIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('http:send', async (_event, payload: SendRequestPayload) => {
     const envVars = payload.environmentVars ?? [];

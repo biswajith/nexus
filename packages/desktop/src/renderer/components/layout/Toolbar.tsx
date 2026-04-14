@@ -17,6 +17,9 @@ const panels: { key: ActivePanel; label: string }[] = [
 const THEME_CYCLE: Array<'dark' | 'light' | 'system'> = ['dark', 'light', 'system'];
 const THEME_LABELS: Record<string, string> = { dark: 'Dark', light: 'Light', system: 'System' };
 
+/**
+ * Top bar: sidebar/console toggles, panel tabs, import/docs, environment select and manager, and theme cycle.
+ */
 export function Toolbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const toggleConsolePanel = useUiStore((s) => s.toggleConsolePanel);

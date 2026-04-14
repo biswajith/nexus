@@ -14,6 +14,9 @@ import { Toolbar } from './Toolbar.js';
 import { CommandPalette } from '../command-palette/CommandPalette.js';
 import styles from './AppLayout.module.css';
 
+/**
+ * Root shell: title bar, sidebar, toolbar, active tool panel, optional console, and command palette.
+ */
 export function AppLayout() {
   const tabs = useRequestStore((s) => s.tabs);
   const openTab = useRequestStore((s) => s.openTab);

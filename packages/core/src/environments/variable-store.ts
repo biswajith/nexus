@@ -9,19 +9,35 @@ export interface VariableScope {
   toRecord(): Record<string, string>;
 }
 
+/** In-memory {@link VariableScope} backed by a map of enabled variables. */
 class MapScope implements VariableScope {
   private vars: Map<string, Variable>;
 
+  /**
+   * Builds a scope from enabled variables only.
+   * @param variables - Initial entries; disabled ones are omitted.
+   */
   constructor(variables: Variable[] = []) {
     this.vars = new Map(
       variables.filter((v) => v.enabled).map((v) => [v.key, v]),
     );
   }
 
+  /**
+   * Looks up a variable's string value in this scope.
+   * @param key - Variable name.
+   * @returns The value, or `undefined` if absent.
+   */
   get(key: string): string | undefined {
     return this.vars.get(key)?.value;
   }
 
+  /**
+   * Sets or updates a variable, creating a string entry when missing.
+   * @param key - Variable name.
+   * @param value - Value to store.
+   * @returns void
+   */
   set(key: string, value: string): void {
     const existing = this.vars.get(key);
     if (existing) {
@@ -31,14 +47,27 @@ class MapScope implements VariableScope {
     }
   }
 
+  /**
+   * Removes a variable from this scope if present.
+   * @param key - Variable name to delete.
+   * @returns void
+   */
   unset(key: string): void {
     this.vars.delete(key);
   }
 
+  /**
+   * Lists every variable currently stored in this scope.
+   * @returns A snapshot array of variable objects.
+   */
   getAll(): Variable[] {
     return [...this.vars.values()];
   }
 
+  /**
+   * Flattens variables to a plain key/value record.
+   * @returns Each key mapped to its string value.
+   */
   toRecord(): Record<string, string> {
     const record: Record<string, string> = {};
     for (const [key, v] of this.vars) {
@@ -50,6 +79,11 @@ class MapScope implements VariableScope {
 
 const SCOPE_ORDER: ScopeLevel[] = ['local', 'environment', 'collection', 'global'];
 
+/**
+ * Returns a fixed-size loremflickr.com placeholder image URL.
+ * @param category - Optional tag segment; omitted for a generic image.
+ * @returns A `640×480` image URL string.
+ */
 function randomImageUrl(category?: string): string {
   const w = 640;
   const h = 480;
@@ -210,9 +244,16 @@ const DYNAMIC_GENERATORS: Record<string, () => string> = {
   '$randomLoremLines': () => faker.lorem.lines(),
 };
 
+/**
+ * Layered variable scopes with `{{name}}` resolution and dynamic `$` placeholders.
+ */
 export class VariableStore {
   private scopes: Map<ScopeLevel, VariableScope> = new Map();
 
+  /**
+   * Seeds global, collection, and environment scopes; local starts empty.
+   * @param config - Optional variable lists per scope level.
+   */
   constructor(config: {
     global?: Variable[];
     collection?: Variable[];
@@ -224,10 +265,20 @@ export class VariableStore {
     this.scopes.set('local', new MapScope());
   }
 
+  /**
+   * Returns the backing scope for a given level.
+   * @param level - `local`, `environment`, `collection`, or `global`.
+   * @returns The scope instance for that level.
+   */
   getScope(level: ScopeLevel): VariableScope {
     return this.scopes.get(level)!;
   }
 
+  /**
+   * Replaces `{{key}}` segments using scope precedence and dynamic generators.
+   * @param template - Text that may contain `{{variable}}` tokens.
+   * @returns Interpolated string; unknown keys stay as the original token.
+   */
   resolve(template: string): string {
     return template.replace(/\{\{(.+?)\}\}/g, (match, key: string) => {
       const trimmed = key.trim();
@@ -246,6 +297,11 @@ export class VariableStore {
     });
   }
 
+  /**
+   * Resolves both header names and values through {@link VariableStore.resolve}.
+   * @param headers - Raw header map (keys and values may be templates).
+   * @returns A new map with resolved keys and values.
+   */
   resolveHeaders(headers: Record<string, string>): Record<string, string> {
     const resolved: Record<string, string> = {};
     for (const [key, value] of Object.entries(headers)) {
@@ -254,6 +310,11 @@ export class VariableStore {
     return resolved;
   }
 
+  /**
+   * Writes key/value pairs into the local scope (overwrites existing keys).
+   * @param data - Variables to merge into local scope.
+   * @returns void
+   */
   setLocalScope(data: Record<string, string>): void {
     const scope = this.scopes.get('local')!;
     for (const [key, value] of Object.entries(data)) {
@@ -261,10 +322,19 @@ export class VariableStore {
     }
   }
 
+  /**
+   * Resets the local scope to an empty {@link MapScope}.
+   * @returns void
+   */
   clearLocalScope(): void {
     this.scopes.set('local', new MapScope());
   }
 
+  /**
+   * Runs a built-in dynamic generator or echoes an unresolved placeholder.
+   * @param key - Dynamic token (e.g. `$guid`), including the leading `$`.
+   * @returns Generated value, or `{{token}}` when no generator exists.
+   */
   private resolveDynamic(key: string): string {
     const gen = DYNAMIC_GENERATORS[key];
     if (gen) return gen();

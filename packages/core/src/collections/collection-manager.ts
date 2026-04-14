@@ -10,13 +10,28 @@ interface CollectionMeta {
   path: string;
 }
 
+/**
+ * Reads and writes Nexus collection folders (metadata, requests, and nested folders) under a base path.
+ */
 export class CollectionManager {
+  /**
+   * Creates a manager scoped to the given collections root directory.
+   * @param basePath - Root directory where collection folders are stored.
+   */
   constructor(private basePath: string) {}
 
+  /**
+   * Creates the base collections directory if it does not already exist.
+   * @returns A promise that resolves when the directory is ready.
+   */
   async ensureDirectory(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
   }
 
+  /**
+   * Scans the base path for subdirectories with a valid `collection.json` and returns their metadata.
+   * @returns A promise that resolves to metadata for each valid collection; invalid dirs are skipped.
+   */
   async listCollections(): Promise<CollectionMeta[]> {
     await this.ensureDirectory();
     const entries = await fs.readdir(this.basePath, { withFileTypes: true });
@@ -42,6 +57,11 @@ export class CollectionManager {
     return collections;
   }
 
+  /**
+   * Loads a collection’s `collection.json`, root-level requests, and nested folders from disk.
+   * @param dirName - Folder name of the collection under the base path.
+   * @returns A promise that resolves to the full `NexusCollection` including `items`.
+   */
   async loadCollection(dirName: string): Promise<NexusCollection> {
     const collectionDir = path.join(this.basePath, dirName);
     const metaPath = path.join(collectionDir, 'collection.json');
@@ -77,6 +97,11 @@ export class CollectionManager {
     return { ...meta, items };
   }
 
+  /**
+   * Recursively loads a folder’s `folder.json` (or infers defaults), nested folders, and `.json` requests.
+   * @param folderPath - Absolute path to the folder on disk.
+   * @returns A promise that resolves to the populated `NexusFolder` tree.
+   */
   private async loadFolder(folderPath: string): Promise<NexusFolder> {
     const metaPath = path.join(folderPath, 'folder.json');
     let meta: NexusFolder;
@@ -107,6 +132,11 @@ export class CollectionManager {
     return { ...meta, items };
   }
 
+  /**
+   * Writes a new collection directory (slug from name), `collection.json`, and all requests and folders.
+   * @param collection - Collection to persist, including nested folder items.
+   * @returns A promise that resolves when files and directories are written.
+   */
   async createCollection(collection: NexusCollection): Promise<void> {
     const slug = this.slugify(collection.name);
     const collectionDir = path.join(this.basePath, slug);
@@ -128,6 +158,12 @@ export class CollectionManager {
     }
   }
 
+  /**
+   * Writes a single request as a slug-named `.json` file under the collection’s `requests` directory.
+   * @param collectionDir - Absolute path to the collection root (not the base manager path).
+   * @param request - Request payload to serialize.
+   * @returns A promise that resolves when the file is written.
+   */
   async saveRequest(collectionDir: string, request: NexusRequest): Promise<void> {
     const requestsDir = path.join(collectionDir, 'requests');
     await fs.mkdir(requestsDir, { recursive: true });
@@ -138,6 +174,12 @@ export class CollectionManager {
     );
   }
 
+  /**
+   * Recursively writes `folder.json` and nested requests or subfolders under `folderPath`.
+   * @param folderPath - Absolute path where this folder’s files should be created.
+   * @param folder - Folder tree to persist.
+   * @returns A promise that resolves when the folder and descendants are written.
+   */
   private async saveFolder(folderPath: string, folder: NexusFolder): Promise<void> {
     await fs.mkdir(folderPath, { recursive: true });
 
@@ -160,11 +202,24 @@ export class CollectionManager {
     }
   }
 
+  /**
+   * Appends a request to an existing collection by saving it under that collection’s `requests` folder.
+   * @param dirName - Collection folder name under the manager’s base path.
+   * @param request - Request to add.
+   * @returns A promise that resolves when the request file is written.
+   */
   async addRequest(dirName: string, request: NexusRequest): Promise<void> {
     const collectionDir = path.join(this.basePath, dirName);
     await this.saveRequest(collectionDir, request);
   }
 
+  /**
+   * Replaces the request file whose stored `id` matches `requestId`, or adds a new file if none match.
+   * @param dirName - Collection folder name under the manager’s base path.
+   * @param requestId - ID of the request to update.
+   * @param request - Updated request body; `id` is forced to `requestId` when written.
+   * @returns A promise that resolves when the file is updated or created.
+   */
   async updateRequest(dirName: string, requestId: string, request: NexusRequest): Promise<void> {
     const requestsDir = path.join(this.basePath, dirName, 'requests');
     try {
@@ -185,6 +240,12 @@ export class CollectionManager {
     await this.addRequest(dirName, { ...request, id: requestId });
   }
 
+  /**
+   * Removes the `.json` request file in the collection’s `requests` directory whose `id` matches `requestId`.
+   * @param dirName - Collection folder name under the manager’s base path.
+   * @param requestId - ID of the request to delete.
+   * @returns A promise that resolves when the file is removed or no match is found.
+   */
   async deleteRequest(dirName: string, requestId: string): Promise<void> {
     const requestsDir = path.join(this.basePath, dirName, 'requests');
     try {
@@ -203,11 +264,21 @@ export class CollectionManager {
     }
   }
 
+  /**
+   * Deletes the entire collection directory under the base path (recursive, ignores missing paths).
+   * @param dirName - Collection folder name to remove.
+   * @returns A promise that resolves when removal finishes.
+   */
   async deleteCollection(dirName: string): Promise<void> {
     const collectionDir = path.join(this.basePath, dirName);
     await fs.rm(collectionDir, { recursive: true, force: true });
   }
 
+  /**
+   * Converts a display name to a lowercase hyphenated slug safe for file and directory names.
+   * @param name - Raw name to normalize.
+   * @returns The slug string.
+   */
   private slugify(name: string): string {
     return name
       .toLowerCase()

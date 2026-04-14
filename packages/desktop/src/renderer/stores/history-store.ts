@@ -12,6 +12,7 @@ interface HistoryState {
   setFilter: (filter: Partial<HistoryFilter>) => void;
 }
 
+/** Request history entries, query filter, loading state, and sync with persisted history. */
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   entries: [],
   loading: false,

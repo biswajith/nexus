@@ -16,6 +16,7 @@ interface EnvironmentState {
   getActiveEnvironment: () => NexusEnvironment | undefined;
 }
 
+/** Environments list, which one is active for requests, and global variables. */
 export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
   environments: [],
   activeEnvironmentId: null,

@@ -11,6 +11,9 @@ interface TestResultsProps {
   results: TestResultItem[];
 }
 
+/**
+ * Shows post-response script test outcomes: pass/fail counts and a per-assertion list with errors and durations.
+ */
 export function TestResults({ results }: TestResultsProps) {
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;

@@ -65,6 +65,7 @@ interface RequestState {
 
 const abortControllers = new Map<string, AbortController>();
 
+/** Open request tabs, edits, send/cancel lifecycle, and last response payload per tab. */
 export const useRequestStore = create<RequestState>((set, get) => ({
   tabs: [],
   activeTabId: null,

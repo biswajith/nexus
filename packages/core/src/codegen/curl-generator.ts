@@ -1,5 +1,11 @@
 import type { NexusRequest } from '../types/index.js';
 
+/**
+ * Builds a `curl` shell command string that mirrors the given Nexus request (URL, method, headers, auth, body, and settings).
+ *
+ * @param request - The HTTP request to translate into curl arguments.
+ * @returns A multi-line curl command with line continuations (`\` + newline + two spaces).
+ */
 export function generateCurl(request: NexusRequest): string {
   const parts: string[] = ['curl'];
 
@@ -120,6 +126,12 @@ export function generateCurl(request: NexusRequest): string {
   return parts.join(' \\\n  ');
 }
 
+/**
+ * Escapes a string for use inside single quotes in a POSIX shell (replaces `'` with `'\''`).
+ *
+ * @param str - Raw text that will be embedded in a single-quoted curl argument.
+ * @returns The same text with single-quote characters safely escaped.
+ */
 function escapeShell(str: string): string {
   return str.replace(/'/g, "'\\''");
 }

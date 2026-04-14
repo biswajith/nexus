@@ -14,10 +14,20 @@ const METHOD_COLORS: Record<string, string> = {
   OPTIONS: 'var(--nx-method-options)',
 };
 
+/**
+ * Type guard that distinguishes folder nodes (with nested `items`) from request leaves.
+ * @param item - A node from a loaded collection.
+ * @returns Whether `item` is a folder.
+ */
 function isFolderItem(item: NexusRequest | NexusFolder): item is NexusFolder {
   return 'items' in item;
 }
 
+/**
+ * Returns the last segment of a `/`-separated path (collection directory name on disk).
+ * @param p - Filesystem-style path string.
+ * @returns Final segment, or `p` if splitting yields nothing.
+ */
 function dirNameFromPath(p: string): string {
   return p.split('/').pop() ?? p;
 }
@@ -26,6 +36,9 @@ type ContextTarget =
   | { kind: 'collection'; id: string; dirName: string; x: number; y: number }
   | { kind: 'request'; id: string; dirName: string; reqId: string; reqName: string; x: number; y: number };
 
+/**
+ * Collections sidebar: expandable collections, nested folders/requests, create/rename/delete, and context actions.
+ */
 export function CollectionTree() {
   const collections = useCollectionStore((s) => s.collections);
   const loadedCollections = useCollectionStore((s) => s.loadedCollections);

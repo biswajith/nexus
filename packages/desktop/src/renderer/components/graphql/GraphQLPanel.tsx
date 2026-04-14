@@ -29,6 +29,9 @@ query {
   
 }`;
 
+/**
+ * Panel for authoring and sending GraphQL queries, editing variables, introspecting schema, and running subscriptions.
+ */
 export function GraphQLPanel() {
   const [url, setUrl] = useState('');
   const [response, setResponse] = useState<GraphQLResponse | null>(null);

@@ -20,7 +20,13 @@ interface DocEndpoint {
   curl: string;
 }
 
+/** Builds Markdown and HTML API documentation from a Nexus collection. */
 export class DocGenerator {
+  /**
+   * Renders the collection as a Markdown document with a table of contents, grouped endpoints, and cURL examples.
+   * @param collection - The Nexus collection to document.
+   * @returns The full Markdown string.
+   */
   generateMarkdown(collection: NexusCollection): string {
     const groups = this.extractGroups(collection);
     const lines: string[] = [];
@@ -74,6 +80,11 @@ export class DocGenerator {
     return lines.join('\n');
   }
 
+  /**
+   * Renders the collection as a single-page styled HTML document with navigation and endpoint details.
+   * @param collection - The Nexus collection to document.
+   * @returns The full HTML document as a string.
+   */
   generateHtml(collection: NexusCollection): string {
     const groups = this.extractGroups(collection);
 
@@ -147,6 +158,11 @@ ${g.endpoints.map((ep) => `
 </html>`;
   }
 
+  /**
+   * Partitions collection items into folder-backed groups and a final group for ungrouped top-level requests.
+   * @param collection - The collection whose `items` are grouped.
+   * @returns Groups each containing a name, optional description, and endpoint list.
+   */
   private extractGroups(collection: NexusCollection): DocGroup[] {
     const groups: DocGroup[] = [];
     const ungrouped: DocEndpoint[] = [];
@@ -170,6 +186,11 @@ ${g.endpoints.map((ep) => `
     return groups;
   }
 
+  /**
+   * Walks a nested folder/request tree and collects every leaf request as a flat endpoint list.
+   * @param items - Folder and request nodes to traverse.
+   * @returns All endpoints under `items`, in traversal order.
+   */
   private flattenEndpoints(items: (NexusRequest | NexusFolder)[]): DocEndpoint[] {
     const result: DocEndpoint[] = [];
     for (const item of items) {
@@ -182,6 +203,11 @@ ${g.endpoints.map((ep) => `
     return result;
   }
 
+  /**
+   * Converts a `NexusRequest` into the shape used for Markdown/HTML output (filters enabled fields, builds cURL).
+   * @param req - The request to normalize for documentation.
+   * @returns Endpoint metadata including URL, headers, query params, body snippet, and generated cURL.
+   */
   private toEndpoint(req: NexusRequest): DocEndpoint {
     return {
       name: req.name,
@@ -201,10 +227,20 @@ ${g.endpoints.map((ep) => `
   }
 }
 
+/**
+ * Lowercases `text` and replaces non-alphanumeric runs with hyphens for stable anchor and `id` values.
+ * @param text - Arbitrary label text to turn into a fragment slug.
+ * @returns A hyphenated slug with leading/trailing hyphens removed.
+ */
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 }
 
+/**
+ * Escapes `&`, `<`, `>`, and `"` so strings are safe to embed in HTML text and attributes.
+ * @param str - Raw user or collection content to escape.
+ * @returns The HTML-escaped string.
+ */
 function esc(str: string): string {
   return str
     .replace(/&/g, '&amp;')

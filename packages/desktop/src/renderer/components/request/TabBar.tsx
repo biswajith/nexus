@@ -11,6 +11,7 @@ const METHOD_COLORS: Record<string, string> = {
   OPTIONS: 'var(--nx-method-options)',
 };
 
+/** Horizontal strip of request tabs with close/new controls, driven by the request store. */
 export function TabBar() {
   const tabs = useRequestStore((s) => s.tabs);
   const activeTabId = useRequestStore((s) => s.activeTabId);

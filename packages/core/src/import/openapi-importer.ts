@@ -75,10 +75,19 @@ interface SchemaObject {
   default?: unknown;
 }
 
+/**
+ * Parses OpenAPI 2 (Swagger) or OpenAPI 3 documents and turns them into Nexus collections,
+ * optional per-server environments, and import warnings.
+ */
 export class OpenApiImporter {
   private warnings: string[] = [];
   private spec!: OpenApiSpec;
 
+  /**
+   * Parses a JSON or YAML OpenAPI document and returns collections, environments, and warnings.
+   * @param data Raw spec string (JSON object or YAML).
+   * @returns Parsed import result with one collection, derived environments, and accumulated warnings.
+   */
   import(data: string): ImportResult {
     this.warnings = [];
 
@@ -105,6 +114,11 @@ export class OpenApiImporter {
     return { collections: [collection], environments: this.buildEnvironments(), warnings: [...this.warnings] };
   }
 
+  /**
+   * Derives the default API base URL from Swagger 2 host/schemes/basePath or OpenAPI 3 servers.
+   * @param isSwagger2 Whether the spec is Swagger 2 (`swagger` field set) vs OpenAPI 3.
+   * @returns Resolved base URL string (with sensible fallbacks if fields are missing).
+   */
   private resolveBaseUrl(isSwagger2: boolean): string {
     if (isSwagger2) {
       const scheme = this.spec.schemes?.[0] ?? 'https';
@@ -115,6 +129,10 @@ export class OpenApiImporter {
     return this.spec.servers?.[0]?.url ?? 'http://localhost';
   }
 
+  /**
+   * Builds extra environments when the spec lists multiple servers (each maps `base_url` to that server).
+   * @returns Environments for additional servers, or an empty array if none or only one server.
+   */
   private buildEnvironments(): import('../types/index.js').NexusEnvironment[] {
     if (!this.spec.servers || this.spec.servers.length <= 1) return [];
 
@@ -127,6 +145,11 @@ export class OpenApiImporter {
     }));
   }
 
+  /**
+   * Walks all paths and HTTP operations, builds requests, and groups them into tag folders when present.
+   * @param isSwagger2 Whether to use Swagger 2 body/parameter rules when building each request.
+   * @returns Folders (one per tag) followed by untagged requests, preserving discovery order.
+   */
   private buildItems(isSwagger2: boolean): (NexusRequest | NexusFolder)[] {
     const paths = this.spec.paths ?? {};
     const tagMap = new Map<string, (NexusRequest | NexusFolder)[]>();
@@ -167,6 +190,15 @@ export class OpenApiImporter {
     return [...folders, ...untagged];
   }
 
+  /**
+   * Converts a single path operation into a `NexusRequest` (URL, query, headers, body, metadata).
+   * @param path OpenAPI path template (e.g. `/users/{id}`).
+   * @param method Lowercase HTTP method name.
+   * @param operation Operation object for that path and method.
+   * @param pathParams Path-level parameters merged with operation parameters.
+   * @param isSwagger2 Whether to build the body using Swagger 2 vs OpenAPI 3 rules.
+   * @returns A fully populated Nexus request object.
+   */
   private buildRequest(
     path: string,
     method: string,
@@ -219,6 +251,11 @@ export class OpenApiImporter {
     } as NexusRequest;
   }
 
+  /**
+   * Maps an OpenAPI 3 `requestBody` to a Nexus `RequestBody` (JSON, forms, XML, text, or none).
+   * @param operation Operation containing optional `requestBody.content`.
+   * @returns Body mode and payload suitable for the first supported content type found.
+   */
   private buildBodyOpenApi3(operation: OperationObject): RequestBody {
     if (!operation.requestBody?.content) return { mode: 'none' };
 
@@ -253,6 +290,12 @@ export class OpenApiImporter {
     return { mode: 'text', raw: '' };
   }
 
+  /**
+   * Maps Swagger 2 body, formData, and consumes to a Nexus `RequestBody`.
+   * @param params All parameters for the operation (including path-level).
+   * @param operation Operation object (used for `consumes` when choosing multipart vs urlencoded).
+   * @returns JSON, urlencoded, multipart, or empty body depending on parameters and consumes.
+   */
   private buildBodySwagger2(params: ParameterObject[], operation: OperationObject): RequestBody {
     const bodyParam = params.find((p) => p.in === 'body');
     if (!bodyParam?.schema) {
@@ -288,6 +331,11 @@ export class OpenApiImporter {
     return { mode: 'json', raw: JSON.stringify(example, null, 2) };
   }
 
+  /**
+   * Turns an object schema’s `properties` into key/value pairs for urlencoded or multipart bodies.
+   * @param schema Optional JSON Schema object with `properties` (and optional `required`).
+   * @returns Key/value rows with enabled flags aligned to `required` when present.
+   */
   private schemaToKeyValuePairs(schema?: SchemaObject): KeyValuePair[] {
     if (!schema?.properties) return [];
     const required = new Set(schema.required ?? []);
@@ -299,6 +347,11 @@ export class OpenApiImporter {
     }));
   }
 
+  /**
+   * Builds a placeholder JSON value from a schema for examples (warns on unresolved `$ref`).
+   * @param schema JSON Schema fragment to materialize.
+   * @returns Example value: object, array, primitives, or defaults; empty object if `$ref` only.
+   */
   private generateExample(schema: SchemaObject): unknown {
     if (schema.example !== undefined) return schema.example;
     if (schema.$ref) {
@@ -334,6 +387,11 @@ export class OpenApiImporter {
     }
   }
 
+  /**
+   * Resolves a string example for a parameter from explicit example/default or nested schema hints.
+   * @param param OpenAPI parameter (query, header, path, etc.).
+   * @returns Best-effort string for UI defaults; may be empty if nothing is defined.
+   */
   private exampleValue(param: ParameterObject): string {
     if (param.example !== undefined) return String(param.example);
     if (param.default !== undefined) return String(param.default);

@@ -12,6 +12,11 @@ export interface SendOptions {
 
 let redirectAgentInitialized = false;
 
+/**
+ * Sets undici's global dispatcher to an agent that follows redirects up to `maxRedirects`.
+ * @param maxRedirects - Maximum number of redirects to follow for subsequent requests.
+ * @returns void
+ */
 function ensureRedirectAgent(maxRedirects: number): void {
   const agent = new Agent().compose(
     interceptors.redirect({ maxRedirections: maxRedirects }),
@@ -20,6 +25,11 @@ function ensureRedirectAgent(maxRedirects: number): void {
   redirectAgentInitialized = true;
 }
 
+/**
+ * Sends an HTTP request, records timing, and parses the response body (including JSON when valid).
+ * @param opts - Method, URL, headers, optional body/abort signal, and request settings (timeout, redirects).
+ * @returns A `NexusResponse` with status, headers, body buffers/text/JSON, and timing metadata.
+ */
 export async function sendHttpRequest(opts: SendOptions): Promise<NexusResponse> {
   const startTime = performance.now();
   const timings: Partial<ResponseTiming> = {};
@@ -89,6 +99,11 @@ export async function sendHttpRequest(opts: SendOptions): Promise<NexusResponse>
   }
 }
 
+/**
+ * Returns a short HTTP reason phrase for common status codes, or an empty string if unmapped.
+ * @param code - Numeric HTTP status code.
+ * @returns The corresponding phrase (e.g. `"OK"` for 200), or `""` when unknown.
+ */
 function getStatusText(code: number): string {
   const map: Record<number, string> = {
     200: 'OK', 201: 'Created', 204: 'No Content',

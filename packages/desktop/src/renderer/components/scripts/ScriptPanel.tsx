@@ -21,6 +21,9 @@ const SNIPPETS = [
   { label: 'Parse & store token', code: 'const body = nx.response.json();\nnx.environment.set("token", body.access_token);' },
 ];
 
+/**
+ * Tabbed panel for editing pre-request and post-response scripts with a snippet sidebar.
+ */
 export function ScriptPanel({
   preRequestScript,
   postResponseScript,

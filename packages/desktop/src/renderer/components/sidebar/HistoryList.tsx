@@ -25,6 +25,11 @@ interface HistoryEntry {
   timestamp: number;
 }
 
+/**
+ * Formats a history timestamp as a short local time (hour and minute).
+ * @param timestamp - Epoch milliseconds.
+ * @returns Locale time string suitable for list rows.
+ */
 function formatTime(timestamp: number) {
   const d = new Date(timestamp);
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -35,6 +40,11 @@ interface HistoryRowCustomProps {
   onOpen: (entry: HistoryEntry) => void;
 }
 
+/**
+ * Virtualized row for a single history entry (method, status, time, URL); invokes `onOpen` when clicked.
+ * @param props - `react-window` row props (`index`, `style`) plus `entries` and `onOpen`.
+ * @returns The positioned row content.
+ */
 function HistoryRow(
   props: { index: number; style: CSSProperties } & HistoryRowCustomProps,
 ): ReactElement {
@@ -61,6 +71,9 @@ function HistoryRow(
   );
 }
 
+/**
+ * History sidebar: fetches entries, clear control, and a virtualized list when there are many items.
+ */
 export function HistoryList() {
   const entries = useHistoryStore((s) => s.entries);
   const fetchHistory = useHistoryStore((s) => s.fetchHistory);

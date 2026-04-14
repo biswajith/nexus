@@ -22,6 +22,9 @@ interface Props {
 const isMac = navigator.platform.toUpperCase().includes('MAC');
 const mod = isMac ? '⌘' : 'Ctrl+';
 
+/**
+ * Searchable command palette overlay for quick actions: requests, panel navigation, UI toggles, and theme.
+ */
 export function CommandPalette({ open, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);

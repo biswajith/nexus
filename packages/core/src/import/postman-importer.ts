@@ -126,9 +126,18 @@ interface PostmanEnvironment {
   _postman_variable_scope?: string;
 }
 
+/**
+ * Converts Postman Collection v2.1 and Postman environment exports into Nexus collections and environments.
+ */
 export class PostmanImporter {
   private warnings: string[] = [];
 
+  /**
+   * Imports a Postman collection JSON value into an {@link ImportResult} with one Nexus collection and script/auth warnings.
+   *
+   * @param data - Unparsed Postman collection payload (Postman v2.1 shape).
+   * @returns Import result containing the converted collection, no environments, and accumulated warnings.
+   */
   importCollection(data: unknown): ImportResult {
     this.warnings = [];
     const parsed = data as PostmanCollection;
@@ -147,6 +156,12 @@ export class PostmanImporter {
     return { collections: [collection], environments: [], warnings: [...this.warnings] };
   }
 
+  /**
+   * Imports a Postman environment JSON value into an {@link ImportResult} with one Nexus environment.
+   *
+   * @param data - Unparsed Postman environment payload.
+   * @returns Import result with the converted environment, no collections, and no warnings.
+   */
   importEnvironment(data: unknown): ImportResult {
     const parsed = data as PostmanEnvironment;
 
@@ -159,6 +174,12 @@ export class PostmanImporter {
     return { collections: [], environments: [environment], warnings: [] };
   }
 
+  /**
+   * Recursively converts a Postman `item` node to either a Nexus folder or a single request.
+   *
+   * @param item - Postman folder or request entry from the collection `item` tree.
+   * @returns A folder when the node has nested items without a direct request; otherwise a request.
+   */
   private convertItem(item: PostmanItem): NexusRequest | NexusFolder {
     if (item.item && !item.request) {
       return this.convertFolder(item);
@@ -166,6 +187,12 @@ export class PostmanImporter {
     return this.convertRequest(item);
   }
 
+  /**
+   * Builds a Nexus folder from a Postman folder item, including nested items, auth, and scripts.
+   *
+   * @param item - Postman item representing a folder (nested `item` array, no standalone `request`).
+   * @returns A Nexus folder with a generated id and recursively converted children.
+   */
   private convertFolder(item: PostmanItem): NexusFolder {
     return {
       id: `folder_${crypto.randomUUID().slice(0, 8)}`,
@@ -177,6 +204,12 @@ export class PostmanImporter {
     };
   }
 
+  /**
+   * Converts a Postman request item into a fully populated Nexus request.
+   *
+   * @param item - Postman item whose `request` field defines the HTTP call.
+   * @returns A Nexus request with URL, headers, query params, body, auth, and scripts.
+   */
   private convertRequest(item: PostmanItem): NexusRequest {
     const req = item.request!;
     return {
@@ -199,12 +232,24 @@ export class PostmanImporter {
     };
   }
 
+  /**
+   * Normalizes Postman's `url` field to a single string (structured object's `raw` or a plain string).
+   *
+   * @param url - Postman URL object, string, or undefined.
+   * @returns URL string, or empty string when absent.
+   */
   private buildUrl(url: string | PostmanUrl | undefined): string {
     if (!url) return '';
     if (typeof url === 'string') return url;
     return url.raw ?? '';
   }
 
+  /**
+   * Extracts query parameters from a Postman URL string (`?...`) or from a structured URL's `query` array.
+   *
+   * @param url - Postman URL as string or object, or undefined.
+   * @returns Key/value pairs with enabled flags for Nexus request params.
+   */
   private extractParams(url: string | PostmanUrl | undefined): KeyValuePair[] {
     if (!url || typeof url === 'string') {
       if (typeof url === 'string' && url.includes('?')) {
@@ -224,6 +269,12 @@ export class PostmanImporter {
     }));
   }
 
+  /**
+   * Maps Postman body modes (raw, urlencoded, formdata, graphql, file) to a Nexus {@link RequestBody}.
+   *
+   * @param body - Postman request body or undefined.
+   * @returns Nexus body with mode and payload fields, or `{ mode: 'none' }` when missing or unsupported.
+   */
   private convertBody(body: PostmanBody | undefined): RequestBody {
     if (!body || !body.mode) return { mode: 'none' };
 
@@ -272,6 +323,12 @@ export class PostmanImporter {
     }
   }
 
+  /**
+   * Converts Postman authentication to Nexus {@link AuthConfig}, pushing warnings for unknown or partial types.
+   *
+   * @param auth - Postman auth object with `type` and type-specific key/value lists.
+   * @returns Equivalent Nexus auth, or `{ type: 'none' }` when unsupported or defaulted.
+   */
   private convertAuth(auth: PostmanAuth): AuthConfig {
     const findVal = (arr: PostmanKeyValue[] | undefined, key: string): string =>
       arr?.find((kv) => kv.key === key)?.value ?? '';
@@ -332,6 +389,12 @@ export class PostmanImporter {
     }
   }
 
+  /**
+   * Maps a Postman variable entry to a Nexus {@link Variable} (including secret typing).
+   *
+   * @param v - Postman variable from collection, environment, or URL.
+   * @returns Nexus variable with key, value, enabled flag, type, and optional description.
+   */
   private convertVariable(v: PostmanVariable): Variable {
     return {
       key: v.key,
@@ -342,6 +405,13 @@ export class PostmanImporter {
     };
   }
 
+  /**
+   * Selects a Postman event by `listen`, joins its script lines, and transpiles Postman script to Nexus script.
+   *
+   * @param events - Postman `event` array from collection, folder, or request, or undefined.
+   * @param listen - Event name to match (`prerequest` or `test`).
+   * @returns Transpiled script source, or empty string when no script is present.
+   */
   private extractScript(events: PostmanEvent[] | undefined, listen: string): string {
     if (!events) return '';
     const event = events.find((e) => e.listen === listen);

@@ -85,6 +85,13 @@ const NX_TO_PM_SIMPLE: [RegExp, string][] = [
   [/\bnx\.execution\.skipRequest\b/g, '/* NEXUS: nx.execution.skipRequest() has no Postman equivalent */'],
 ];
 
+/**
+ * Rewrites a Postman script (`pm.*`, legacy globals) into Nexus (`nx.*`) form, including
+ * pattern-specific conversions and warnings for APIs that need manual follow-up.
+ *
+ * @param script - Source script text using Postman APIs or legacy syntax.
+ * @returns The transpiled script plus any non-fatal conversion warnings.
+ */
 export function transpilePostmanToNexus(script: string): TranspileResult {
   const warnings: string[] = [];
   let result = script;
@@ -259,6 +266,13 @@ export function transpilePostmanToNexus(script: string): TranspileResult {
   return { script: result, warnings };
 }
 
+/**
+ * Rewrites a Nexus script (`nx.*`) into Postman-style `pm.*` calls using inverse symbol mapping
+ * and a few structural substitutions where applicable.
+ *
+ * @param script - Source script text using Nexus APIs.
+ * @returns The Postman-oriented script plus warnings (e.g. unsupported inverse mappings).
+ */
 export function transpileNexusToPostman(script: string): TranspileResult {
   const warnings: string[] = [];
   let result = script;
@@ -280,6 +294,13 @@ export function transpileNexusToPostman(script: string): TranspileResult {
   return { script: result, warnings };
 }
 
+/**
+ * Heuristically classifies a script as Postman, Nexus, or unknown from `pm.` / `nx.` usage
+ * counts and legacy Postman patterns (`postman.*Variable`, `tests[...]`).
+ *
+ * @param script - Script text to inspect.
+ * @returns `'postman'`, `'nexus'`, or `'unknown'` based on detected conventions.
+ */
 export function detectScriptPlatform(script: string): 'postman' | 'nexus' | 'unknown' {
   const pmMatches = (script.match(/\bpm\./g) || []).length;
   const nxMatches = (script.match(/\bnx\./g) || []).length;

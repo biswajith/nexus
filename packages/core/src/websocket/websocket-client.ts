@@ -29,6 +29,9 @@ export interface WsConnectOptions {
   maxReconnectAttempts?: number;
 }
 
+/**
+ * Event-driven WebSocket client that tracks connection state, logs messages, and supports optional auto-reconnect.
+ */
 export class WebSocketClient extends EventEmitter {
   private socket: WebSocket | null = null;
   private messages: WsMessage[] = [];
@@ -38,20 +41,37 @@ export class WebSocketClient extends EventEmitter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private maxMessages = 1000;
 
+  /**
+   * Returns the current connection lifecycle status.
+   * @returns The current {@link WsConnectionStatus}.
+   */
   getStatus(): WsConnectionStatus {
     return this.status;
   }
 
+  /**
+   * Returns a copy of the captured sent and received message log.
+   * @returns A new array containing stored {@link WsMessage} entries.
+   */
   getMessages(): WsMessage[] {
     return [...this.messages];
   }
 
+  /**
+   * Stores connect options, resets reconnect attempts, and opens the WebSocket.
+   * @param opts - URL, protocols, headers, TLS, and reconnect settings.
+   * @returns void
+   */
   connect(opts: WsConnectOptions): void {
     this.options = opts;
     this.reconnectAttempts = 0;
     this.doConnect();
   }
 
+  /**
+   * Instantiates the underlying `WebSocket` and attaches open, message, close, and error handlers (including optional reconnect).
+   * @returns void
+   */
   private doConnect(): void {
     if (!this.options) return;
     const { url, protocols, headers, rejectUnauthorized } = this.options;
@@ -103,6 +123,11 @@ export class WebSocketClient extends EventEmitter {
     });
   }
 
+  /**
+   * Sends a UTF-8 text frame and records it in the message log.
+   * @param data - Text payload to send.
+   * @returns The recorded {@link WsMessage} for this outbound frame.
+   */
   send(data: string): WsMessage {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
@@ -120,6 +145,11 @@ export class WebSocketClient extends EventEmitter {
     return msg;
   }
 
+  /**
+   * Sends a binary frame and records it in the message log (payload stored as hex).
+   * @param data - Binary payload to send.
+   * @returns The recorded {@link WsMessage} for this outbound frame.
+   */
   sendBinary(data: Buffer): WsMessage {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       throw new Error('WebSocket is not connected');
@@ -137,6 +167,12 @@ export class WebSocketClient extends EventEmitter {
     return msg;
   }
 
+  /**
+   * Disables auto-reconnect, closes the socket, and clears any pending reconnect timer.
+   * @param code - WebSocket close code (defaults to 1000).
+   * @param reason - Optional close reason string.
+   * @returns void
+   */
   disconnect(code?: number, reason?: string): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -150,11 +186,20 @@ export class WebSocketClient extends EventEmitter {
     }
   }
 
+  /**
+   * Clears the in-memory message history and emits `messages-cleared`.
+   * @returns void
+   */
   clearMessages(): void {
     this.messages = [];
     this.emit('messages-cleared');
   }
 
+  /**
+   * Normalizes `ws` raw message data to a Node.js {@link Buffer}.
+   * @param data - Raw payload from a `message` event.
+   * @returns A buffer representing the incoming bytes.
+   */
   private static rawDataToBuffer(data: WebSocket.RawData): Buffer {
     if (Buffer.isBuffer(data)) {
       return data;
@@ -168,6 +213,11 @@ export class WebSocketClient extends EventEmitter {
     return Buffer.from(data);
   }
 
+  /**
+   * Appends a message and trims the oldest entries when the log exceeds the max size.
+   * @param msg - Message to append.
+   * @returns void
+   */
   private addMessage(msg: WsMessage): void {
     this.messages.push(msg);
     if (this.messages.length > this.maxMessages) {
@@ -175,6 +225,11 @@ export class WebSocketClient extends EventEmitter {
     }
   }
 
+  /**
+   * Updates the internal status and emits a `status` event with the new value.
+   * @param status - Next lifecycle status.
+   * @returns void
+   */
   private setStatus(status: WsConnectionStatus): void {
     this.status = status;
     this.emit('status', status);

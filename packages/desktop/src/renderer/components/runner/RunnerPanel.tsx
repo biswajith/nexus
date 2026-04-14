@@ -3,6 +3,9 @@ import { useRunnerStore } from '../../stores/runner-store.js';
 import { useCollectionStore } from '../../stores/collection-store.js';
 import styles from './RunnerPanel.module.css';
 
+/**
+ * Panel for configuring and running collection requests (iterations, delay, stop-on-error) and viewing run progress and results.
+ */
 export function RunnerPanel() {
   const [iterations, setIterations] = useState(1);
   const [delayMs, setDelayMs] = useState(0);

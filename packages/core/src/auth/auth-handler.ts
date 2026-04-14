@@ -17,13 +17,30 @@ export interface AuthHandler {
   apply(config: AuthConfig, request: PreparedRequest): Promise<AuthResult>;
 }
 
+/**
+ * Authentication handler that applies no credentials (no-op).
+ */
 class NoAuth implements AuthHandler {
+  /**
+   * Returns an empty result; no headers or query parameters are added.
+   *
+   * @returns Empty {@link AuthResult}.
+   */
   async apply(): Promise<AuthResult> {
     return {};
   }
 }
 
+/**
+ * Authentication handler that sends an API key in a header or query parameter.
+ */
 class ApiKeyAuth implements AuthHandler {
+  /**
+   * Adds the configured key/value pair as a header or query param when both are set.
+   *
+   * @param config - Auth configuration with `key`, `value`, and `addTo` (`header` or `query`).
+   * @returns Headers or `params` for the API key, or an empty result if key or value is missing.
+   */
   async apply(config: AuthConfig): Promise<AuthResult> {
     const key = String(config.key ?? '');
     const value = String(config.value ?? '');
@@ -38,7 +55,16 @@ class ApiKeyAuth implements AuthHandler {
   }
 }
 
+/**
+ * Authentication handler that sets an `Authorization` header with a bearer-style token.
+ */
 class BearerTokenAuth implements AuthHandler {
+  /**
+   * Sets `Authorization` to `{prefix} {token}` (default prefix `Bearer`).
+   *
+   * @param config - Auth configuration with `token` and optional `prefix`.
+   * @returns Headers containing `Authorization`, or an empty result if `token` is missing.
+   */
   async apply(config: AuthConfig): Promise<AuthResult> {
     const token = String(config.token ?? '');
     const prefix = String(config.prefix ?? 'Bearer');
@@ -47,7 +73,16 @@ class BearerTokenAuth implements AuthHandler {
   }
 }
 
+/**
+ * Authentication handler that encodes username and password for HTTP Basic auth.
+ */
 class BasicAuth implements AuthHandler {
+  /**
+   * Base64-encodes `username:password` and sets the `Authorization: Basic ...` header.
+   *
+   * @param config - Auth configuration with `username` and `password`.
+   * @returns Headers with the Basic `Authorization` value.
+   */
   async apply(config: AuthConfig): Promise<AuthResult> {
     const username = String(config.username ?? '');
     const password = String(config.password ?? '');
@@ -56,7 +91,16 @@ class BasicAuth implements AuthHandler {
   }
 }
 
+/**
+ * Authentication handler that sends an OAuth2 access token in the header or query string.
+ */
 class OAuth2Auth implements AuthHandler {
+  /**
+   * Sends the access token as `Authorization: {tokenType} {accessToken}` or `access_token` query param.
+   *
+   * @param config - Auth configuration with `accessToken`, `tokenType`, and `addTo` (`header` or `query`).
+   * @returns Headers or `params` for the token, or an empty result if `accessToken` is missing.
+   */
   async apply(config: AuthConfig): Promise<AuthResult> {
     const accessToken = String(config.accessToken ?? '');
     const tokenType = String(config.tokenType ?? 'Bearer');
@@ -71,7 +115,17 @@ class OAuth2Auth implements AuthHandler {
   }
 }
 
+/**
+ * Authentication handler that builds an HTTP Digest `Authorization` header from credentials.
+ */
 class DigestAuth implements AuthHandler {
+  /**
+   * Computes the digest response from config and the request method/URI, then returns the header.
+   *
+   * @param config - Digest fields: `username`, `password`, `realm`, `nonce`, `qop`, `algorithm`, `opaque`.
+   * @param request - Prepared request; `method` and URL path/query form the digest URI.
+   * @returns Headers with a `Digest` `Authorization` value, or an empty result if `username` or `nonce` is missing.
+   */
   async apply(config: AuthConfig, request: PreparedRequest): Promise<AuthResult> {
     const username = String(config.username ?? '');
     const password = String(config.password ?? '');
@@ -107,12 +161,29 @@ class DigestAuth implements AuthHandler {
     return { headers: { 'Authorization': header } };
   }
 
+  /**
+   * Hashes a string with the given algorithm and returns a lowercase hex string.
+   *
+   * @param algorithm - Node.js hash algorithm name (e.g. `md5`, `sha256`).
+   * @param data - Input string to digest.
+   * @returns Hex-encoded hash of `data`.
+   */
   private hash(algorithm: string, data: string): string {
     return createHash(algorithm).update(data).digest('hex');
   }
 }
 
+/**
+ * Authentication handler that signs requests with AWS Signature Version 4 (AWS4-HMAC-SHA256).
+ */
 class AwsSigV4Auth implements AuthHandler {
+  /**
+   * Canonicalizes the request, signs it with SigV4, and returns `Authorization` and `x-amz-*` headers.
+   *
+   * @param config - AWS credentials (`accessKey`, `secretKey`), `region`, `service`, optional `sessionToken`.
+   * @param request - Prepared request (`method`, `url`, `body`) to include in the canonical request.
+   * @returns Headers for SigV4 signing, or an empty result if access key or secret key is missing.
+   */
   async apply(config: AuthConfig, request: PreparedRequest): Promise<AuthResult> {
     const accessKey = String(config.accessKey ?? '');
     const secretKey = String(config.secretKey ?? '');
@@ -168,6 +239,15 @@ class AwsSigV4Auth implements AuthHandler {
     return { headers };
   }
 
+  /**
+   * Derives the SigV4 signing key via the AWS4 HMAC chain for the given date, region, and service.
+   *
+   * @param key - AWS secret access key.
+   * @param dateStamp - Request date stamp `YYYYMMDD` in UTC.
+   * @param region - AWS region identifier.
+   * @param service - AWS service name for the credential scope.
+   * @returns Binary signing key used to HMAC the string to sign.
+   */
   private getSignatureKey(key: string, dateStamp: string, region: string, service: string): Buffer {
     const kDate = createHmac('sha256', `AWS4${key}`).update(dateStamp).digest();
     const kRegion = createHmac('sha256', kDate).update(region).digest();
@@ -187,10 +267,23 @@ const authHandlers: Record<string, AuthHandler> = {
   'aws-sig-v4': new AwsSigV4Auth(),
 };
 
+/**
+ * Looks up the {@link AuthHandler} registered for an auth type, falling back to the `none` handler.
+ *
+ * @param type - Auth type key (e.g. `bearer`, `basic`, `aws-sig-v4`).
+ * @returns The handler for `type`, or {@link NoAuth} when `type` is unknown.
+ */
 export function getAuthHandler(type: AuthType): AuthHandler {
   return authHandlers[type] ?? authHandlers['none']!;
 }
 
+/**
+ * Applies the auth handler for `config.type`, merging returned headers and query params into the request.
+ *
+ * @param config - Auth configuration including `type` and type-specific fields.
+ * @param request - Prepared request to authenticate.
+ * @returns A new prepared request with merged headers and URL (including query updates from auth).
+ */
 export async function resolveAuth(
   config: AuthConfig,
   request: PreparedRequest,

@@ -46,6 +46,7 @@ const METHOD_COLORS: Record<string, string> = {
 
 type RequestTab = 'params' | 'headers' | 'body' | 'auth' | 'scripts';
 
+/** Edits the active tab's URL, method, send/cURL/save actions, and sub-panels (params through scripts). */
 export function RequestBuilder({ tab }: RequestBuilderProps) {
   const [activeTab, setActiveTab] = useState<RequestTab>('params');
   const setMethod = useRequestStore((s) => s.setMethod);

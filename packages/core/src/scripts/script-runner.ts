@@ -8,13 +8,31 @@ interface ScriptChainResult {
   request: MutableRequest;
 }
 
+/**
+ * Executes pre-request and post-response script chains in a sandbox, merging variable scopes
+ * and applying request mutations where scripts allow.
+ */
 export class ScriptRunner {
   private sandbox: ScriptSandbox;
 
+  /**
+   * Creates a runner that uses a script sandbox with the given execution timeout.
+   * @param timeoutMs - Maximum time in milliseconds for a single script execution (default 30_000).
+   */
   constructor(timeoutMs = 30_000) {
     this.sandbox = new ScriptSandbox(timeoutMs);
   }
 
+  /**
+   * Runs pre-request scripts in order (collection → each parent folder → request), applying
+   * mutations to a mutable request and stopping early if a script sets execution to skipped.
+   * @param collection - Collection whose pre-request script and variables participate in scope.
+   * @param request - Request whose pre-request script runs last; its body is copied for mutation.
+   * @param parentFolders - Ancestor folders from root toward the request, in traversal order.
+   * @param envVars - Environment variables exposed as the environment scope.
+   * @param globalVars - Global variables exposed as the globals scope.
+   * @returns Per-script results and the final mutable request after the chain (or early exit).
+   */
   runPreRequestChain(
     collection: NexusCollection,
     request: NexusRequest,
@@ -68,6 +86,17 @@ export class ScriptRunner {
     return { results, request: mutableRequest };
   }
 
+  /**
+   * Runs post-response scripts in order (request → parent folders inner-to-outer → collection)
+   * with shared variable scopes, a mutable request snapshot, and the given response.
+   * @param collection - Collection whose post-response script runs last; its variables are in scope.
+   * @param request - Request whose post-response script runs first; used for mutable request context.
+   * @param parentFolders - Ancestor folders from root toward the request (reversed for execution order).
+   * @param envVars - Environment variables exposed as the environment scope.
+   * @param globalVars - Global variables exposed as the globals scope.
+   * @param response - Response data passed into each post-response script.
+   * @returns Results from each executed script, in execution order.
+   */
   runPostResponseChain(
     collection: NexusCollection,
     request: NexusRequest,
@@ -114,6 +143,12 @@ export class ScriptRunner {
     return results;
   }
 
+  /**
+   * Traverses the collection tree to locate a request by id and returns its folder ancestry.
+   * @param collection - Collection whose `items` tree is searched.
+   * @param requestId - Id of the request whose parent folders are needed.
+   * @returns Folders from root to the request's immediate parent, in order; empty if not found.
+   */
   findParentFolders(
     collection: NexusCollection,
     requestId: string,
@@ -136,6 +171,11 @@ export class ScriptRunner {
     return path;
   }
 
+  /**
+   * Serializes the request body for script context according to `request.body.mode`.
+   * @param request - Request whose body mode and payload determine the returned string.
+   * @returns Encoded body string, or `null` when there is no applicable body content.
+   */
   private extractBody(request: NexusRequest): string | null {
     switch (request.body.mode) {
       case 'json':
