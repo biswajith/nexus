@@ -364,38 +364,6 @@ class Expectation {
   }
 
   /**
-   * Asserts the subject is strictly `true`.
-   * @returns void
-   */
-  true(): void {
-    this.assert(this.value === true, `expected true, got ${this.value}`, `expected value to not be true`);
-  }
-
-  /**
-   * Asserts the subject is strictly `false`.
-   * @returns void
-   */
-  false(): void {
-    this.assert(this.value === false, `expected false, got ${this.value}`, `expected value to not be false`);
-  }
-
-  /**
-   * Asserts the subject is `null`.
-   * @returns void
-   */
-  null(): void {
-    this.assert(this.value === null, `expected null, got ${this.value}`, `expected value to not be null`);
-  }
-
-  /**
-   * Asserts the subject is `undefined`.
-   * @returns void
-   */
-  undefined(): void {
-    this.assert(this.value === undefined, `expected undefined, got ${this.value}`, `expected value to not be undefined`);
-  }
-
-  /**
    * Throws {@link AssertionError} unless the condition matches the current negation state.
    * @param condition - Outcome of the underlying check when not negated.
    * @param failMessage - Message when the check fails without negation.
@@ -498,5 +466,31 @@ Object.defineProperty(Expectation.prototype, 'an', {
     const checker = new TypeChecker(this.value, this._not);
     const fn = (typeName: string) => checker.check(typeName);
     return fn;
+  },
+});
+
+// Chai-style property assertions: .to.be.true, .to.be.false, .to.be.null, .to.be.undefined
+// These must be getters so that property access triggers the assertion.
+Object.defineProperty(Expectation.prototype, 'true', {
+  get() {
+    this.assert(this.value === true, `expected true, got ${this.value}`, `expected value to not be true`);
+  },
+});
+
+Object.defineProperty(Expectation.prototype, 'false', {
+  get() {
+    this.assert(this.value === false, `expected false, got ${this.value}`, `expected value to not be false`);
+  },
+});
+
+Object.defineProperty(Expectation.prototype, 'null', {
+  get() {
+    this.assert(this.value === null, `expected null, got ${this.value}`, `expected value to not be null`);
+  },
+});
+
+Object.defineProperty(Expectation.prototype, 'undefined', {
+  get() {
+    this.assert(this.value === undefined, `expected undefined, got ${this.value}`, `expected value to not be undefined`);
   },
 });
