@@ -38,7 +38,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.4.0",
-    "electron": "^35.0.0",
+    "electron": "^41.1.1",
     "lightningcss": "^1.29.0",
     "typescript": "^5.7.0",
     "unplugin-parcel-macros": "^0.2.0",

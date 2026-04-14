@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  Built as a modern <a href="https://www.postman.com">Postman</a> replacement with TypeScript, Electron, React 19, and Adobe React Spectrum S2.
+  A modern, local-first API development tool built with TypeScript, Electron, React 19, and Adobe React Spectrum S2.
 </p>
 
 ---
@@ -15,7 +15,7 @@
 
 - **Local-first** — Collections and environments are stored as plain JSON files on disk, fully Git-friendly.
 - **Zero accounts** — No sign-up, no cloud sync, no telemetry.
-- **Postman compatible** — Import Postman collections, environments, and scripts. Automatic `pm.*` → `nx.*` transpilation.
+- **Import compatible** — Import collections, environments, and scripts from other tools. Automatic `pm.*` → `nx.*` transpilation.
 - **Full protocol support** — HTTP, GraphQL, WebSocket, and SSE in one tool.
 - **Scriptable** — Pre-request/post-response JavaScript scripts with a sandboxed `nx.*` API and Chai-like assertions.
 
@@ -35,7 +35,7 @@
 - File-based storage at `~/.nexus/` — Git-friendly, human-readable JSON
 - Nested folder organization with collection-level auth and scripts
 - Layered variable system: local → environment → collection → global
-- 119 dynamic variables (`{{$randomFirstName}}`, `{{$randomEmail}}`, `{{$timestamp}}`, etc.) — full Postman parity via `@faker-js/faker`
+- 119 dynamic variables (`{{$randomFirstName}}`, `{{$randomEmail}}`, `{{$timestamp}}`, etc.) — full feature parity via `@faker-js/faker`
 - Environment quick-switch from the toolbar
 
 ### Authentication
@@ -65,9 +65,9 @@
 - Real-time progress and test result streaming
 
 ### Import & Export
-- **Import**: Postman Collection v2.1, Postman Environment, OpenAPI 3.x, Swagger 2.0, cURL commands
-- **Export**: Nexus JSON, Postman Collection v2.1
-- Bidirectional `pm.*` ↔ `nx.*` script transpilation for Postman compatibility
+- **Import**: Collection v2.1, Environment, OpenAPI 3.x, Swagger 2.0, cURL commands
+- **Export**: Nexus JSON, Collection v2.1
+- Bidirectional `pm.*` ↔ `nx.*` script transpilation for compatibility with external tools
 
 ### Productivity
 - cURL code generation from any request
@@ -85,7 +85,7 @@
 |---|---|
 | Language | TypeScript 5 (strict mode) |
 | Runtime | Node.js 20+ |
-| Desktop | Electron 35 |
+| Desktop | Electron 41 |
 | UI | React 19 + Adobe React Spectrum S2 |
 | Build | Vite 6 |
 | State | Zustand 5 |

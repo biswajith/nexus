@@ -3,6 +3,7 @@ import { useUiStore, type ActivePanel } from '../../stores/ui-store.js';
 import { useEnvironmentStore } from '../../stores/environment-store.js';
 import { ImportExportModal } from '../import-export/ImportExportModal.js';
 import { DocsModal } from '../docs/DocsModal.js';
+import { EnvironmentManager } from '../sidebar/EnvironmentManager.js';
 import styles from './Toolbar.module.css';
 
 const panels: { key: ActivePanel; label: string }[] = [
@@ -30,6 +31,7 @@ export function Toolbar() {
   const setActiveEnvironment = useEnvironmentStore((s) => s.setActiveEnvironment);
   const [importExportOpen, setImportExportOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [envManagerOpen, setEnvManagerOpen] = useState(false);
 
   const cycleTheme = () => {
     const idx = THEME_CYCLE.indexOf(colorScheme);
@@ -68,19 +70,28 @@ export function Toolbar() {
           </button>
         </div>
         <div className={styles.center}>
-          <select
-            className={styles.envSelect}
-            value={activeEnvironmentId ?? ''}
-            onChange={(e) => setActiveEnvironment(e.target.value || null)}
-            aria-label="Select environment"
-          >
-            <option value="">No Environment</option>
-            {environments.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.name}
-              </option>
-            ))}
-          </select>
+          <div className={styles.envGroup}>
+            <select
+              className={styles.envSelect}
+              value={activeEnvironmentId ?? ''}
+              onChange={(e) => setActiveEnvironment(e.target.value || null)}
+              aria-label="Select environment"
+            >
+              <option value="">No Environment</option>
+              {environments.map((env) => (
+                <option key={env.id} value={env.id}>
+                  {env.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className={styles.envManageBtn}
+              onClick={() => setEnvManagerOpen(true)}
+              title="Manage environments"
+            >
+              Manage
+            </button>
+          </div>
         </div>
         <div className={styles.right}>
           <button className={styles.textBtn} onClick={cycleTheme} title={`Theme: ${colorScheme}`}>
@@ -93,6 +104,7 @@ export function Toolbar() {
       </div>
       <ImportExportModal open={importExportOpen} onClose={() => setImportExportOpen(false)} />
       <DocsModal open={docsOpen} onClose={() => setDocsOpen(false)} />
+      <EnvironmentManager open={envManagerOpen} onClose={() => setEnvManagerOpen(false)} />
     </>
   );
 }

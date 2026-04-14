@@ -3,12 +3,19 @@ import { useEnvironmentStore } from '../../stores/environment-store.js';
 import type { NexusEnvironment, Variable } from '@nexus/core';
 import styles from './EnvironmentManager.module.css';
 
-export function EnvironmentManager() {
+interface Props {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function EnvironmentManager({ open, onClose }: Props) {
   const environments = useEnvironmentStore((s) => s.environments);
   const fetchEnvironments = useEnvironmentStore((s) => s.fetchEnvironments);
   const addEnvironment = useEnvironmentStore((s) => s.addEnvironment);
   const updateEnvironment = useEnvironmentStore((s) => s.updateEnvironment);
   const deleteEnvironment = useEnvironmentStore((s) => s.deleteEnvironment);
+  const activeEnvironmentId = useEnvironmentStore((s) => s.activeEnvironmentId);
+  const setActiveEnvironment = useEnvironmentStore((s) => s.setActiveEnvironment);
   const loading = useEnvironmentStore((s) => s.loading);
 
   const [creating, setCreating] = useState(false);
@@ -18,8 +25,8 @@ export function EnvironmentManager() {
   const createRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchEnvironments();
-  }, []);
+    if (open) fetchEnvironments();
+  }, [open]);
 
   useEffect(() => {
     if (creating) createRef.current?.focus();
@@ -48,96 +55,141 @@ export function EnvironmentManager() {
     setConfirmDeleteId(null);
   };
 
+  const handleClose = () => {
+    setEditingId(null);
+    setCreating(false);
+    setConfirmDeleteId(null);
+    onClose();
+  };
+
+  if (!open) return null;
+
   const editingEnv = environments.find((e) => e.id === editingId);
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <span className={styles.headerTitle}>Environments</span>
-        <button
-          className={styles.addBtn}
-          aria-label="New environment"
-          onClick={() => { setCreating(true); setNewName(''); }}
-        >
-          +
-        </button>
-      </div>
-
-      {creating && (
-        <div className={styles.createRow}>
-          <input
-            ref={createRef}
-            className={styles.inlineInput}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreate();
-              if (e.key === 'Escape') setCreating(false);
-            }}
-            onBlur={handleCreate}
-            placeholder="Environment name"
-          />
+    <div className={styles.overlay} onClick={handleClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <span className={styles.modalTitle}>
+            {editingId && editingEnv ? `Edit: ${editingEnv.name}` : 'Manage Environments'}
+          </span>
+          <button className={styles.closeBtn} onClick={handleClose} aria-label="Close">&times;</button>
         </div>
-      )}
-
-      {loading && <div className={styles.loading}>Loading...</div>}
-
-      {!loading && environments.length === 0 && !creating && (
-        <div className={styles.empty}>
-          <p>No environments yet.</p>
-          <p className={styles.hint}>Click + to create one.</p>
-        </div>
-      )}
-
-      {!editingId && (
-        <div className={styles.envList}>
-          {environments.map((env) => (
-            <div key={env.id} className={styles.envItem}>
-              <button
-                className={styles.envBtn}
-                onClick={() => setEditingId(env.id)}
-              >
-                <span className={styles.envName}>{env.name}</span>
-                <span className={styles.varCount}>{env.variables.length} vars</span>
-              </button>
-              <div className={styles.envActions}>
-                {confirmDeleteId === env.id ? (
-                  <>
-                    <button
-                      className={styles.confirmBtn}
-                      onClick={() => handleDelete(env.id)}
-                    >
-                      Confirm
-                    </button>
-                    <button
-                      className={styles.cancelBtn}
-                      onClick={() => setConfirmDeleteId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className={styles.deleteBtn}
-                    onClick={() => setConfirmDeleteId(env.id)}
-                    title="Delete environment"
-                  >
-                    ×
-                  </button>
-                )}
+        <div className={styles.modalBody}>
+          {!editingId ? (
+            <>
+              <div className={styles.listHeader}>
+                <span className={styles.listCount}>
+                  {environments.length} environment{environments.length !== 1 ? 's' : ''}
+                </span>
+                <button
+                  className={styles.createBtn}
+                  onClick={() => { setCreating(true); setNewName(''); }}
+                >
+                  + New Environment
+                </button>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {editingId && editingEnv && (
-        <EnvironmentEditor
-          env={editingEnv}
-          onBack={() => setEditingId(null)}
-          onUpdate={updateEnvironment}
-        />
-      )}
+              {creating && (
+                <div className={styles.createRow}>
+                  <input
+                    ref={createRef}
+                    className={styles.inlineInput}
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleCreate();
+                      if (e.key === 'Escape') setCreating(false);
+                    }}
+                    onBlur={handleCreate}
+                    placeholder="Environment name"
+                  />
+                </div>
+              )}
+
+              {loading && <div className={styles.loading}>Loading...</div>}
+
+              {!loading && environments.length === 0 && !creating && (
+                <div className={styles.empty}>
+                  <p>No environments yet.</p>
+                  <p className={styles.hint}>Create one to start using variables like {'{{base_url}}'}.</p>
+                </div>
+              )}
+
+              <div className={styles.envList}>
+                {environments.map((env) => (
+                  <div
+                    key={env.id}
+                    className={`${styles.envItem} ${activeEnvironmentId === env.id ? styles.envItemActive : ''}`}
+                  >
+                    <button
+                      className={styles.envBtn}
+                      onClick={() => setEditingId(env.id)}
+                    >
+                      <div className={styles.envInfo}>
+                        <span className={styles.envName}>{env.name}</span>
+                        <span className={styles.varCount}>{env.variables.length} variable{env.variables.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      {activeEnvironmentId === env.id && (
+                        <span className={styles.activeBadge}>Active</span>
+                      )}
+                    </button>
+                    <div className={styles.envActions}>
+                      {activeEnvironmentId !== env.id ? (
+                        <button
+                          className={styles.activateBtn}
+                          onClick={() => setActiveEnvironment(env.id)}
+                          title="Set as active environment"
+                        >
+                          Activate
+                        </button>
+                      ) : (
+                        <button
+                          className={styles.deactivateBtn}
+                          onClick={() => setActiveEnvironment(null)}
+                          title="Deactivate environment"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                      {confirmDeleteId === env.id ? (
+                        <>
+                          <button
+                            className={styles.confirmBtn}
+                            onClick={() => handleDelete(env.id)}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            className={styles.cancelBtn}
+                            onClick={() => setConfirmDeleteId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className={styles.deleteBtn}
+                          onClick={() => setConfirmDeleteId(env.id)}
+                          title="Delete environment"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : editingEnv ? (
+            <EnvironmentEditor
+              env={editingEnv}
+              onBack={() => setEditingId(null)}
+              onUpdate={updateEnvironment}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -188,17 +240,18 @@ function EnvironmentEditor({ env, onBack, onUpdate }: EnvironmentEditorProps) {
   return (
     <div className={styles.editor}>
       <div className={styles.editorHeader}>
-        <button className={styles.backBtn} onClick={onBack}>← Back</button>
+        <button className={styles.backBtn} onClick={onBack}>← All Environments</button>
         <button
           className={styles.saveBtn}
           onClick={handleSave}
           disabled={!dirty}
         >
-          Save
+          Save Changes
         </button>
       </div>
 
       <div className={styles.nameRow}>
+        <label className={styles.fieldLabel}>Name</label>
         <input
           className={styles.nameInput}
           value={name}
@@ -210,11 +263,21 @@ function EnvironmentEditor({ env, onBack, onUpdate }: EnvironmentEditorProps) {
       <div className={styles.varsSection}>
         <div className={styles.varsHeader}>
           <span className={styles.varsTitle}>Variables</span>
-          <button className={styles.addVarBtn} onClick={addVariable}>+ Add</button>
+          <button className={styles.addVarBtn} onClick={addVariable}>+ Add Variable</button>
         </div>
 
+        {variables.length > 0 && (
+          <div className={styles.varGridHeader}>
+            <span />
+            <span>Key</span>
+            <span>Value</span>
+            <span>Type</span>
+            <span />
+          </div>
+        )}
+
         {variables.length === 0 && (
-          <div className={styles.emptyVars}>No variables. Click + Add to create one.</div>
+          <div className={styles.emptyVars}>No variables defined. Click "+ Add Variable" to create one.</div>
         )}
 
         {variables.map((v, i) => (

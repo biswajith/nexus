@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type SidebarTab = 'collections' | 'history' | 'environments' | 'search';
+type SidebarTab = 'collections' | 'history' | 'search';
 type ResponseTab = 'body' | 'headers' | 'cookies' | 'tests' | 'timing' | 'visualize';
 type BodyViewMode = 'pretty' | 'raw' | 'preview';
 type ColorScheme = 'light' | 'dark' | 'system';
