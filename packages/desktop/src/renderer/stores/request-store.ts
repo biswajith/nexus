@@ -9,6 +9,8 @@ import type {
   HistoryEntry,
 } from '@nexus/core';
 import { useHistoryStore } from './history-store.js';
+import { useEnvironmentStore } from './environment-store.js';
+import { useCollectionStore } from './collection-store.js';
 
 interface TestResultItem {
   name: string;
@@ -169,6 +171,21 @@ export const useRequestStore = create<RequestState>((set, get) => ({
       }
     }
 
+    const envStore = useEnvironmentStore.getState();
+    const activeEnv = envStore.getActiveEnvironment();
+    const environmentVars = activeEnv?.variables ?? [];
+    const globalVars = envStore.globalVariables;
+
+    const collStore = useCollectionStore.getState();
+    const origin = tab.origin;
+    let collectionVars: typeof environmentVars = [];
+    if (origin) {
+      const loaded = collStore.loadedCollections.get(origin.dirName);
+      if (loaded?.variables) {
+        collectionVars = loaded.variables;
+      }
+    }
+
     try {
       const response = await window.nexus.http.send({
         method: request.method,
@@ -179,6 +196,9 @@ export const useRequestStore = create<RequestState>((set, get) => ({
         auth: request.auth,
         preRequestScript: request.preRequestScript,
         postResponseScript: request.postResponseScript,
+        environmentVars,
+        collectionVars,
+        globalVars,
       });
 
       set((state) => ({

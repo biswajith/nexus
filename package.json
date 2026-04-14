@@ -14,6 +14,7 @@
     "build:desktop": "npm run build --workspace=packages/desktop",
     "lint": "eslint packages/*/src --ext .ts,.tsx",
     "typecheck": "tsc --build",
+    "test": "npm run test --workspace=packages/core",
     "clean": "rm -rf packages/*/dist packages/*/node_modules/.vite"
   },
   "engines": {

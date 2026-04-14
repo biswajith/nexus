@@ -94,7 +94,7 @@ export class CollectionManager {
       // No folders directory yet
     }
 
-    return { ...meta, items };
+    return { ...meta, items: this.sortByItemOrder(items, meta.itemOrder) };
   }
 
   /**
@@ -129,7 +129,30 @@ export class CollectionManager {
       }
     }
 
-    return { ...meta, items };
+    return { ...meta, items: this.sortByItemOrder(items, meta.itemOrder) };
+  }
+
+  /**
+   * Reorders items to match a persisted `itemOrder` array of IDs; unrecognized items are appended.
+   * @param items - Unsorted items loaded from disk.
+   * @param order - Optional ID array defining the desired order.
+   * @returns Items sorted by `order`, or the original array when no order is stored.
+   */
+  private sortByItemOrder(items: (NexusRequest | NexusFolder)[], order?: string[]): (NexusRequest | NexusFolder)[] {
+    if (!order || order.length === 0) return items;
+    const itemMap = new Map(items.map((item) => [item.id, item]));
+    const sorted: (NexusRequest | NexusFolder)[] = [];
+    for (const id of order) {
+      const item = itemMap.get(id);
+      if (item) {
+        sorted.push(item);
+        itemMap.delete(id);
+      }
+    }
+    for (const item of itemMap.values()) {
+      sorted.push(item);
+    }
+    return sorted;
   }
 
   /**
