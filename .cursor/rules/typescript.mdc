@@ -1,0 +1,41 @@
+---
+description: TypeScript best practices for Nexus
+globs: "**/*.ts"
+alwaysApply: false
+---
+
+# TypeScript
+
+- Use `strict: true`. Never add `@ts-ignore` or `@ts-expect-error` without a comment explaining why.
+- Avoid `any`. Use `unknown` and narrow with type guards. If `any` is truly needed, document the reason.
+- Prefer `interface` for object shapes and `type` for unions/intersections.
+- Use `readonly` for properties that should not be reassigned after construction.
+- Prefer `const` assertions and discriminated unions over enums.
+- Always handle the error case in `catch` blocks. Never use empty `catch {}` in production paths — at minimum, log or re-throw.
+
+```typescript
+// BAD
+} catch {}
+
+// GOOD — at minimum acknowledge the failure
+} catch {
+  // Expected: directory may not exist yet
+}
+```
+
+- Use explicit return types on exported functions and public methods.
+- Prefer `Map`/`Set` over plain objects when keys are dynamic.
+- Use `import type` for type-only imports to avoid runtime overhead.
+- Never use `require()`. This project is ESM-only (`"type": "module"`).
+- Suffix all relative imports with `.js` (TypeScript ESM resolution requires it).
+
+```typescript
+// BAD
+import { Foo } from './foo';
+
+// GOOD
+import { Foo } from './foo.js';
+```
+
+- Keep functions short (<40 lines). Extract helpers for complex logic.
+- Use `node:` prefix for Node.js built-in imports (`import * as fs from 'node:fs/promises'`).

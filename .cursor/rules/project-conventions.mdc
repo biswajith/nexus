@@ -1,0 +1,42 @@
+---
+description: Nexus project architecture and conventions
+alwaysApply: true
+---
+
+# Project Conventions
+
+## Architecture
+
+- **Monorepo** with npm workspaces: `packages/core` (logic library) and `packages/desktop` (Electron app).
+- `@nexus/core` is a pure TypeScript library with no Electron or DOM dependencies.
+- `@nexus/desktop` has three layers: `main/` (Node.js Electron main), `preload/` (context bridge), `renderer/` (React UI).
+
+## Module System
+
+- ESM-only (`"type": "module"` in all `package.json` files).
+- All relative imports must end with `.js` extension.
+- Use `node:` prefix for Node built-ins.
+
+## Electron IPC
+
+- All renderer↔main communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
+- Handlers are registered in `ipc-handlers.ts`. The preload exposes them via `contextBridge` as `window.nexus`.
+- Never access Node APIs directly from the renderer.
+
+## State Management
+
+- Renderer uses **Zustand** stores in `renderer/stores/`.
+- One store per domain: `useRequestStore`, `useCollectionStore`, `useEnvironmentStore`, etc.
+- Cross-store reads use `useOtherStore.getState()` only in action handlers, never in render.
+
+## Data Persistence
+
+- Collections are stored as directories under `~/.nexus/collections/` with `collection.json` metadata.
+- Environments, history, and tokens are JSON files under `~/.nexus/`.
+- Item ordering is tracked via `itemOrder` arrays in metadata files.
+
+## Naming
+
+- Files: `kebab-case.ts`. Classes: `PascalCase`. Functions/variables: `camelCase`.
+- Test files: `module-name.test.ts` alongside the source file.
+- Zustand stores: `use<Domain>Store`.

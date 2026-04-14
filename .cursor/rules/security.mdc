@@ -1,0 +1,32 @@
+---
+description: Security best practices for Nexus codebase
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Security
+
+- Never commit secrets, tokens, or credentials. Use environment variables or the `TokenStore` for persistence.
+- Never use `eval()` or `new Function()` outside the `ScriptSandbox`. All user scripts must run in `vm.createContext` with `codeGeneration: { strings: false, wasm: false }`.
+- Always set a timeout on `vm.Script.runInContext` to prevent infinite loops.
+- Sanitize all user-provided HTML before rendering. Use the `Visualizer` class which escapes data injected into templates.
+- Validate and sanitize file paths. Never join user input directly into `fs` calls without normalizing with `path.resolve` and checking it stays within `NEXUS_HOME`.
+- In Electron, never enable `nodeIntegration` in renderer. All main-process access must go through the `contextBridge` preload API.
+- Validate IPC payloads on the main process side. Never trust renderer-provided data shapes without checking.
+
+```typescript
+// BAD — trusts renderer input
+ipcMain.handle('file:read', async (_e, filePath: string) => {
+  return fs.readFile(filePath, 'utf-8');
+});
+
+// GOOD — confine to NEXUS_HOME
+ipcMain.handle('file:read', async (_e, filePath: string) => {
+  const resolved = path.resolve(NEXUS_HOME, filePath);
+  if (!resolved.startsWith(NEXUS_HOME)) throw new Error('Path outside data dir');
+  return fs.readFile(resolved, 'utf-8');
+});
+```
+
+- Use `rejectUnauthorized: true` by default for TLS. Only disable when the user explicitly opts in via request settings.
+- Never log sensitive headers (`Authorization`, `Cookie`, `Set-Cookie`) at `info` level. Mask or omit them.

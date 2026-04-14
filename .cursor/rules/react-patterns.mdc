@@ -1,0 +1,28 @@
+---
+description: React and component patterns for the desktop renderer
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# React Patterns
+
+- Use functional components only. No class components.
+- Colocate component styles with their component file using CSS modules (`.module.css`).
+- Keep components under 150 lines. Extract sub-components or custom hooks when they grow.
+- Use Zustand stores (not prop drilling) for shared state. Access via `useXxxStore()` hooks.
+- Prefer `useCallback`/`useMemo` for expensive computations and callbacks passed to child components.
+- Never call Zustand `getState()` inside render. Use the hook form for reactive updates.
+
+```typescript
+// BAD — won't re-render on changes
+const tabs = useRequestStore.getState().tabs;
+
+// GOOD — reactive
+const tabs = useRequestStore((s) => s.tabs);
+```
+
+- Avoid `useEffect` for derived state. Compute it inline or with `useMemo`.
+- Event handlers: prefix with `handle` (`handleClick`, `handleSubmit`).
+- Props interfaces: name as `ComponentNameProps` and export if reused.
+- Accessibility: all interactive elements must have keyboard support and ARIA labels.
+- Never use `dangerouslySetInnerHTML` unless the HTML is sanitized (use `Visualizer` for safe rendering).

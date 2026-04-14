@@ -1,0 +1,28 @@
+---
+description: Testing conventions for the Nexus test suite
+globs: "**/*.test.ts"
+alwaysApply: false
+---
+
+# Testing
+
+- Test framework: **Vitest**. Config in `packages/core/vitest.config.ts`.
+- Test files live next to the source file: `foo.ts` → `foo.test.ts`.
+- Use `describe` blocks named after the module/class under test. Use `it` for individual cases.
+- Write tests that verify behavior, not implementation details.
+- Each test should be independent. Use `beforeEach`/`afterEach` for setup/teardown.
+- For filesystem tests, use `os.tmpdir()` + `fs.mkdtemp` and clean up in `afterEach`.
+- Mock external I/O (network, filesystem) when testing pure logic. Use `vi.mock()` or `vi.spyOn()`.
+- Name tests descriptively: `it('returns empty array when no collections exist')` not `it('works')`.
+- Assert specific values, not just truthiness. Prefer `toEqual`, `toContain`, `toThrow` over `toBeTruthy`.
+- For error paths, use `expect(() => ...).toThrow(SpecificError)`.
+
+```typescript
+// BAD
+expect(result).toBeTruthy();
+
+// GOOD
+expect(result).toEqual({ id: 'req_1', name: 'Test' });
+```
+
+- Run `npx vitest run` before pushing. All tests must pass.
