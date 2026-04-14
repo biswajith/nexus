@@ -84,6 +84,17 @@ export class AssertionEngine {
 }
 
 /** Chai-style assertion builder: chainable matchers, optional negation via `not`, and JSON-schema checks. */
+interface Expectation {
+  /** Asserts the subject is strictly `true`. */
+  readonly true: void;
+  /** Asserts the subject is strictly `false`. */
+  readonly false: void;
+  /** Asserts the subject is `null`. */
+  readonly null: void;
+  /** Asserts the subject is `undefined`. */
+  readonly undefined: void;
+}
+
 class Expectation {
   private _not = false;
 
