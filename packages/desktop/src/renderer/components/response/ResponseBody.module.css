@@ -1,0 +1,107 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.viewModeRow {
+  display: flex;
+  gap: var(--nx-space-1);
+  padding: var(--nx-space-2) var(--nx-space-3);
+  border-bottom: 1px solid var(--nx-border-subtle);
+  flex-shrink: 0;
+  background: var(--nx-bg-surface);
+}
+
+.viewBtn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--nx-radius-sm);
+  padding: 3px 10px;
+  font-size: var(--nx-font-size-sm);
+  color: var(--nx-text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--nx-transition-fast);
+}
+
+.viewBtn:hover {
+  background: var(--nx-bg-hover);
+  color: var(--nx-text-primary);
+}
+
+.activeView {
+  background: var(--nx-bg-active);
+  color: var(--nx-text-primary);
+  font-weight: 600;
+}
+
+.copyBtn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-sm);
+  padding: 3px 10px;
+  font-size: var(--nx-font-size-sm);
+  color: var(--nx-text-secondary);
+  cursor: pointer;
+  transition: all var(--nx-transition-fast);
+}
+
+.copyBtn:hover {
+  background: var(--nx-bg-hover);
+  color: var(--nx-text-primary);
+  border-color: var(--nx-border-strong);
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+  background: var(--nx-bg-surface-sunken);
+}
+
+.pre {
+  margin: 0;
+  padding: var(--nx-space-3);
+  font-family: var(--nx-font-mono);
+  font-size: var(--nx-font-size-md);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--nx-text-primary);
+}
+
+.preview {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: white;
+}
+
+.truncatedNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nx-space-3);
+  padding: var(--nx-space-3);
+  background: var(--nx-bg-surface);
+  border-top: 1px solid var(--nx-border);
+  font-size: var(--nx-font-size-md);
+  color: var(--nx-text-secondary);
+}
+
+.showAllBtn {
+  background: var(--nx-accent);
+  border: none;
+  border-radius: var(--nx-radius-sm);
+  padding: var(--nx-space-1) var(--nx-space-3);
+  font-size: var(--nx-font-size-md);
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity var(--nx-transition-fast);
+}
+
+.showAllBtn:hover {
+  opacity: 0.85;
+}

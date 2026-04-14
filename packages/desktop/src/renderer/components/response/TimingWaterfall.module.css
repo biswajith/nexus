@@ -1,0 +1,72 @@
+.waterfall {
+  padding: var(--nx-space-4);
+}
+
+.totalRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--nx-space-3);
+  padding: var(--nx-space-2) 0 var(--nx-space-4);
+  border-bottom: 1px solid var(--nx-border);
+  margin-bottom: var(--nx-space-4);
+}
+
+.totalLabel {
+  font-size: var(--nx-font-size-lg);
+  font-weight: 600;
+  color: var(--nx-text-secondary);
+}
+
+.totalValue {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--nx-accent-text);
+  font-family: var(--nx-font-mono);
+}
+
+.segments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nx-space-2);
+}
+
+.segmentRow {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-3);
+}
+
+.segLabel {
+  width: 80px;
+  font-size: var(--nx-font-size-md);
+  font-weight: 600;
+  color: var(--nx-text-secondary);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.barContainer {
+  flex: 1;
+  height: 22px;
+  background: var(--nx-bg-surface-sunken);
+  border-radius: var(--nx-radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: var(--nx-radius-sm);
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.segValue {
+  width: 70px;
+  font-size: var(--nx-font-size-md);
+  color: var(--nx-text-tertiary);
+  font-family: var(--nx-font-mono);
+  flex-shrink: 0;
+}

@@ -1,0 +1,8 @@
+.editor {
+  height: 100%;
+  min-height: 150px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-sm);
+  overflow: hidden;
+  background: var(--nx-bg-surface-sunken);
+}

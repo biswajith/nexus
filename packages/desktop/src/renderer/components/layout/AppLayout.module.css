@@ -1,0 +1,65 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--nx-bg-app);
+  color: var(--nx-text-primary);
+}
+
+.titleBar {
+  -webkit-app-region: drag;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--nx-bg-surface-sunken);
+  border-bottom: 1px solid var(--nx-border);
+}
+
+.titleText {
+  font-size: var(--nx-font-size-md);
+  font-weight: 600;
+  color: var(--nx-text-tertiary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--nx-bg-surface);
+  border-right: 1px solid var(--nx-border);
+}
+
+.mainArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--nx-bg-app);
+}
+
+.editorArea {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.consoleArea {
+  flex-shrink: 0;
+  border-top: 1px solid var(--nx-border);
+  overflow: hidden;
+  background: var(--nx-bg-surface);
+}

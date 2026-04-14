@@ -1,0 +1,97 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.modeRow {
+  display: flex;
+  gap: var(--nx-space-4);
+  padding: var(--nx-space-2) var(--nx-space-3);
+  border-bottom: 1px solid var(--nx-border);
+  flex-wrap: wrap;
+  background: var(--nx-bg-surface);
+}
+
+.modeLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-1);
+  font-size: var(--nx-font-size-md);
+  cursor: pointer;
+  color: var(--nx-text-secondary);
+  transition: color var(--nx-transition-fast);
+}
+
+.modeLabel:hover {
+  color: var(--nx-text-primary);
+}
+
+.modeRadio {
+  accent-color: var(--nx-accent);
+}
+
+.modeActive {
+  color: var(--nx-accent-text);
+  font-weight: 600;
+}
+
+.modeContent {
+  flex: 1;
+  overflow: auto;
+}
+
+.noneMessage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 100px;
+  color: var(--nx-text-tertiary);
+  font-size: var(--nx-font-size-base);
+}
+
+.rawEditor {
+  width: 100%;
+  min-height: 200px;
+  background: var(--nx-bg-surface-sunken);
+  border: none;
+  padding: var(--nx-space-3);
+  font-family: var(--nx-font-mono);
+  font-size: var(--nx-font-size-base);
+  color: var(--nx-text-primary);
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.rawEditor:focus {
+  outline: 2px solid var(--nx-accent);
+  outline-offset: -2px;
+}
+
+.rawEditor::placeholder {
+  color: var(--nx-text-tertiary);
+}
+
+.graphqlEditor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.graphqlSection {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.graphqlLabel {
+  padding: var(--nx-space-2) var(--nx-space-3);
+  font-size: var(--nx-font-size-sm);
+  font-weight: 600;
+  color: var(--nx-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--nx-border-subtle);
+  background: var(--nx-bg-surface);
+}

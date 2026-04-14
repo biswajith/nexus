@@ -1,0 +1,119 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--nx-bg-overlay);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.palette {
+  background: var(--nx-bg-surface);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-xl);
+  width: 540px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--nx-shadow-xl);
+  overflow: hidden;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  padding: var(--nx-space-3) var(--nx-space-4);
+  border-bottom: 1px solid var(--nx-border);
+  gap: var(--nx-space-2);
+}
+
+.searchIcon {
+  color: var(--nx-text-tertiary);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--nx-text-primary);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.searchInput::placeholder {
+  color: var(--nx-text-tertiary);
+}
+
+.results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--nx-space-1) 0;
+}
+
+.resultItem {
+  display: flex;
+  align-items: center;
+  padding: var(--nx-space-2) var(--nx-space-4);
+  cursor: pointer;
+  gap: var(--nx-space-3);
+  font-size: var(--nx-font-size-base);
+  color: var(--nx-text-primary);
+  transition: background var(--nx-transition-fast);
+}
+
+.resultItem:hover,
+.resultItemActive {
+  background: var(--nx-bg-selected);
+}
+
+.resultIcon {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.resultLabel {
+  flex: 1;
+  color: var(--nx-text-primary);
+}
+
+.resultShortcut {
+  font-size: var(--nx-font-size-sm);
+  color: var(--nx-text-tertiary);
+  font-family: var(--nx-font-mono);
+  background: var(--nx-bg-surface-sunken);
+  padding: 1px 6px;
+  border-radius: var(--nx-radius-sm);
+}
+
+.resultCategory {
+  font-size: var(--nx-font-size-xs);
+  color: var(--nx-text-tertiary);
+  padding: 2px 6px;
+  background: var(--nx-bg-surface-sunken);
+  border-radius: var(--nx-radius-sm);
+}
+
+.sectionLabel {
+  padding: var(--nx-space-2) var(--nx-space-4) var(--nx-space-1);
+  font-size: var(--nx-font-size-xs);
+  font-weight: 600;
+  color: var(--nx-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.empty {
+  padding: var(--nx-space-6);
+  text-align: center;
+  color: var(--nx-text-tertiary);
+  font-size: var(--nx-font-size-base);
+}

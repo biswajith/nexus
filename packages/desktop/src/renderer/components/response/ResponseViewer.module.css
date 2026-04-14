@@ -1,0 +1,136 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nx-space-4);
+  height: 100%;
+  color: var(--nx-text-tertiary);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.emptyContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nx-space-2);
+  color: var(--nx-text-tertiary);
+}
+
+.emptyHint {
+  font-size: var(--nx-font-size-md);
+  color: var(--nx-text-tertiary);
+}
+
+/* ── Status Bar ───────────────────────────────────────────────────── */
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-3);
+  padding: var(--nx-space-2) var(--nx-space-3);
+  border-bottom: 1px solid var(--nx-border);
+  flex-shrink: 0;
+  background: var(--nx-bg-surface);
+}
+
+.statusBadge {
+  font-size: var(--nx-font-size-md);
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: var(--nx-radius-sm);
+  letter-spacing: 0.02em;
+}
+
+.positive {
+  background: var(--nx-success-subtle);
+  color: var(--nx-success);
+}
+
+.informative {
+  background: rgba(59, 130, 246, 0.12);
+  color: #5b9bf5;
+}
+
+.notice {
+  background: var(--nx-warning-subtle);
+  color: var(--nx-warning);
+}
+
+.negative {
+  background: var(--nx-danger-subtle);
+  color: var(--nx-danger);
+}
+
+.neutral {
+  background: var(--nx-bg-active);
+  color: var(--nx-text-secondary);
+}
+
+.meta {
+  font-size: var(--nx-font-size-md);
+  color: var(--nx-text-secondary);
+  font-family: var(--nx-font-mono);
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────── */
+
+.tabRow {
+  display: flex;
+  border-bottom: 1px solid var(--nx-border);
+  padding: 0 var(--nx-space-3);
+  flex-shrink: 0;
+  background: var(--nx-bg-surface);
+}
+
+.tabBtn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--nx-space-2) var(--nx-space-3);
+  font-size: var(--nx-font-size-md);
+  font-weight: 500;
+  color: var(--nx-text-secondary);
+  cursor: pointer;
+  transition: all var(--nx-transition-fast);
+}
+
+.tabBtn:hover {
+  color: var(--nx-text-primary);
+  background: var(--nx-bg-hover);
+}
+
+.activeTab {
+  color: var(--nx-accent-text);
+  border-bottom-color: var(--nx-accent);
+}
+
+.tabContent {
+  flex: 1;
+  overflow: auto;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--nx-border);
+  border-top-color: var(--nx-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

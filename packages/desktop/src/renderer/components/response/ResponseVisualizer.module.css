@@ -1,0 +1,13 @@
+.container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.frame {
+  flex: 1;
+  border: none;
+  background: var(--nx-bg-surface-sunken);
+  min-height: 200px;
+}

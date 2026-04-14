@@ -1,0 +1,123 @@
+.editor {
+  padding: var(--nx-space-2) var(--nx-space-3);
+}
+
+.header {
+  display: flex;
+  gap: var(--nx-space-2);
+  padding: var(--nx-space-1) 0;
+  font-size: var(--nx-font-size-sm);
+  font-weight: 600;
+  color: var(--nx-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--nx-border);
+}
+
+.checkCol {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.keyCol,
+.valueCol,
+.descCol {
+  flex: 1;
+}
+
+.actionCol {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-2);
+  padding: 2px 0;
+  border-bottom: 1px solid var(--nx-border-subtle);
+  transition: background var(--nx-transition-fast);
+}
+
+.row:hover {
+  background: var(--nx-bg-hover);
+}
+
+.checkbox {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--nx-accent);
+}
+
+.input {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--nx-radius-sm);
+  padding: var(--nx-space-1) var(--nx-space-2);
+  font-size: var(--nx-font-size-md);
+  font-family: var(--nx-font-mono);
+  color: var(--nx-text-primary);
+  transition: all var(--nx-transition-fast);
+}
+
+.input:hover {
+  background: var(--nx-bg-hover);
+}
+
+.input:focus {
+  border-color: var(--nx-accent);
+  outline: none;
+  background: var(--nx-bg-input);
+}
+
+.input::placeholder {
+  color: var(--nx-text-tertiary);
+}
+
+.removeBtn {
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  color: var(--nx-text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: var(--nx-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--nx-transition-fast);
+  opacity: 0;
+}
+
+.row:hover .removeBtn {
+  opacity: 1;
+}
+
+.removeBtn:hover {
+  background: var(--nx-danger-subtle);
+  color: var(--nx-danger);
+}
+
+.addRow {
+  padding: var(--nx-space-1) 0;
+}
+
+.addBtn {
+  background: none;
+  border: none;
+  color: var(--nx-accent-text);
+  cursor: pointer;
+  font-size: var(--nx-font-size-md);
+  padding: var(--nx-space-1) var(--nx-space-2);
+  border-radius: var(--nx-radius-sm);
+  transition: all var(--nx-transition-fast);
+}
+
+.addBtn:hover {
+  background: var(--nx-accent-subtle);
+}

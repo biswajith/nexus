@@ -1,0 +1,215 @@
+/* ── Design Tokens ─────────────────────────────────────────────────── */
+
+:root {
+  /* Typography */
+  --nx-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --nx-font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  --nx-font-size-xs: 10px;
+  --nx-font-size-sm: 11px;
+  --nx-font-size-md: 12px;
+  --nx-font-size-base: 13px;
+  --nx-font-size-lg: 14px;
+  --nx-font-size-xl: 16px;
+
+  /* Spacing */
+  --nx-space-1: 4px;
+  --nx-space-2: 8px;
+  --nx-space-3: 12px;
+  --nx-space-4: 16px;
+  --nx-space-5: 20px;
+  --nx-space-6: 24px;
+  --nx-space-8: 32px;
+
+  /* Radius */
+  --nx-radius-sm: 4px;
+  --nx-radius-md: 6px;
+  --nx-radius-lg: 8px;
+  --nx-radius-xl: 12px;
+
+  /* Shadows */
+  --nx-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --nx-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --nx-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.2);
+  --nx-shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.3);
+
+  /* Transitions */
+  --nx-transition-fast: 120ms ease;
+  --nx-transition-normal: 200ms ease;
+
+  /* Method colors */
+  --nx-method-get: #22c55e;
+  --nx-method-post: #eab308;
+  --nx-method-put: #3b82f6;
+  --nx-method-patch: #a855f7;
+  --nx-method-delete: #ef4444;
+  --nx-method-head: #6366f1;
+  --nx-method-options: #ec4899;
+
+  /* Status colors */
+  --nx-status-success: #22c55e;
+  --nx-status-redirect: #3b82f6;
+  --nx-status-client-error: #f59e0b;
+  --nx-status-server-error: #ef4444;
+}
+
+/* ── Dark Theme (default) ─────────────────────────────────────────── */
+
+:root,
+[data-color-scheme="dark"],
+[style*="color-scheme: dark"] {
+  --nx-bg-app: #1c1c1e;
+  --nx-bg-surface: #2c2c2e;
+  --nx-bg-surface-raised: #333336;
+  --nx-bg-surface-sunken: #161618;
+  --nx-bg-input: #1c1c1e;
+  --nx-bg-input-hover: #232325;
+  --nx-bg-hover: rgba(255, 255, 255, 0.06);
+  --nx-bg-active: rgba(255, 255, 255, 0.1);
+  --nx-bg-selected: rgba(59, 130, 246, 0.15);
+  --nx-bg-overlay: rgba(0, 0, 0, 0.65);
+  --nx-bg-elevated: #3a3a3c;
+
+  --nx-border: #3a3a3c;
+  --nx-border-subtle: #2c2c2e;
+  --nx-border-strong: #4a4a4e;
+
+  --nx-text-primary: #f5f5f7;
+  --nx-text-secondary: #a1a1a6;
+  --nx-text-tertiary: #6e6e73;
+  --nx-text-inverse: #1c1c1e;
+
+  --nx-accent: #5b9bf5;
+  --nx-accent-hover: #4a8df0;
+  --nx-accent-subtle: rgba(91, 155, 245, 0.12);
+  --nx-accent-text: #5b9bf5;
+
+  --nx-danger: #ef4444;
+  --nx-danger-subtle: rgba(239, 68, 68, 0.12);
+  --nx-success: #22c55e;
+  --nx-success-subtle: rgba(34, 197, 94, 0.12);
+  --nx-warning: #f59e0b;
+  --nx-warning-subtle: rgba(245, 158, 11, 0.12);
+
+  --nx-scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --nx-scrollbar-track: transparent;
+}
+
+/* ── Light Theme ──────────────────────────────────────────────────── */
+
+[data-color-scheme="light"],
+[style*="color-scheme: light"] {
+  --nx-bg-app: #f5f5f7;
+  --nx-bg-surface: #ffffff;
+  --nx-bg-surface-raised: #fafafa;
+  --nx-bg-surface-sunken: #ebebed;
+  --nx-bg-input: #ffffff;
+  --nx-bg-input-hover: #f0f0f2;
+  --nx-bg-hover: rgba(0, 0, 0, 0.04);
+  --nx-bg-active: rgba(0, 0, 0, 0.08);
+  --nx-bg-selected: rgba(59, 130, 246, 0.08);
+  --nx-bg-overlay: rgba(0, 0, 0, 0.4);
+  --nx-bg-elevated: #ffffff;
+
+  --nx-border: #d1d1d6;
+  --nx-border-subtle: #e5e5ea;
+  --nx-border-strong: #b0b0b6;
+
+  --nx-text-primary: #1c1c1e;
+  --nx-text-secondary: #636366;
+  --nx-text-tertiary: #8e8e93;
+  --nx-text-inverse: #f5f5f7;
+
+  --nx-accent: #2563eb;
+  --nx-accent-hover: #1d4ed8;
+  --nx-accent-subtle: rgba(37, 99, 235, 0.08);
+  --nx-accent-text: #2563eb;
+
+  --nx-danger: #dc2626;
+  --nx-danger-subtle: rgba(220, 38, 38, 0.08);
+  --nx-success: #16a34a;
+  --nx-success-subtle: rgba(22, 163, 74, 0.08);
+  --nx-warning: #d97706;
+  --nx-warning-subtle: rgba(217, 119, 6, 0.08);
+
+  --nx-scrollbar-thumb: rgba(0, 0, 0, 0.2);
+  --nx-scrollbar-track: transparent;
+
+  /* Override method colors for light mode readability */
+  --nx-method-get: #16a34a;
+  --nx-method-post: #ca8a04;
+  --nx-method-put: #2563eb;
+  --nx-method-patch: #7c3aed;
+  --nx-method-delete: #dc2626;
+  --nx-method-head: #4f46e5;
+  --nx-method-options: #db2777;
+}
+
+/* ── Base Resets ──────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--nx-font-sans);
+  font-size: var(--nx-font-base);
+  color: var(--nx-text-primary);
+  background: var(--nx-bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--nx-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--nx-scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Focus Styles ─────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--nx-accent);
+  outline-offset: -1px;
+  border-radius: var(--nx-radius-sm);
+}
+
+/* ── Selection ────────────────────────────────────────────────────── */
+
+::selection {
+  background: var(--nx-accent-subtle);
+  color: var(--nx-text-primary);
+}
+
+/* ── Common input styles ──────────────────────────────────────────── */
+
+input, textarea, select {
+  font-family: inherit;
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}

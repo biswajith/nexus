@@ -1,0 +1,70 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.requestSection {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--nx-bg-app);
+}
+
+.divider {
+  flex-shrink: 0;
+  height: 5px;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nx-bg-surface);
+  border-top: 1px solid var(--nx-border);
+  border-bottom: 1px solid var(--nx-border);
+  transition: background var(--nx-transition-fast);
+}
+
+.divider:hover,
+.divider:active {
+  background: var(--nx-accent);
+}
+
+.dividerHandle {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--nx-text-tertiary);
+  opacity: 0.5;
+}
+
+.divider:hover .dividerHandle {
+  background: white;
+  opacity: 1;
+}
+
+.responseSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--nx-bg-app);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nx-text-tertiary);
+  font-size: var(--nx-font-size-lg);
+}

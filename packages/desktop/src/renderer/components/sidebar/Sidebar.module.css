@@ -1,0 +1,42 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tabRow {
+  display: flex;
+  border-bottom: 1px solid var(--nx-border);
+  flex-shrink: 0;
+  background: var(--nx-bg-surface);
+}
+
+.tabBtn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--nx-space-2) var(--nx-space-2);
+  font-size: var(--nx-font-size-md);
+  font-weight: 500;
+  color: var(--nx-text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--nx-transition-fast);
+}
+
+.tabBtn:hover {
+  color: var(--nx-text-primary);
+  background: var(--nx-bg-hover);
+}
+
+.activeTab {
+  color: var(--nx-accent-text);
+  border-bottom-color: var(--nx-accent);
+}
+
+.content {
+  flex: 1;
+  overflow: auto;
+}

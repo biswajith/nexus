@@ -1,0 +1,111 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--nx-space-2) var(--nx-space-3);
+  border-bottom: 1px solid var(--nx-border-subtle);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: var(--nx-font-size-sm);
+  font-weight: 600;
+  color: var(--nx-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.loading {
+  padding: var(--nx-space-4);
+  text-align: center;
+  color: var(--nx-text-tertiary);
+  font-size: var(--nx-font-size-md);
+}
+
+.empty {
+  padding: var(--nx-space-6) var(--nx-space-4);
+  text-align: center;
+  color: var(--nx-text-tertiary);
+  font-size: var(--nx-font-size-base);
+}
+
+.entriesContainer {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--nx-space-2) var(--nx-space-3);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--nx-border-subtle);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: var(--nx-text-primary);
+  transition: background var(--nx-transition-fast);
+}
+
+.entry:hover {
+  background: var(--nx-bg-hover);
+}
+
+.entryTop {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-2);
+}
+
+.method {
+  font-size: var(--nx-font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.status {
+  font-size: var(--nx-font-size-sm);
+  color: var(--nx-text-secondary);
+}
+
+.time {
+  font-size: var(--nx-font-size-sm);
+  color: var(--nx-text-tertiary);
+  margin-left: auto;
+}
+
+.url {
+  font-size: var(--nx-font-size-md);
+  color: var(--nx-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--nx-font-mono);
+}
+
+.clearBtn {
+  background: none;
+  border: none;
+  color: var(--nx-text-tertiary);
+  cursor: pointer;
+  font-size: var(--nx-font-size-sm);
+  padding: 2px 6px;
+  border-radius: var(--nx-radius-sm);
+  transition: all var(--nx-transition-fast);
+}
+
+.clearBtn:hover {
+  background: var(--nx-danger-subtle);
+  color: var(--nx-danger);
+}

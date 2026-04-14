@@ -1,0 +1,116 @@
+.tabBar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-surface);
+  padding: 0 var(--nx-space-2);
+  gap: 2px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-space-2);
+  padding: 0 var(--nx-space-3);
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--nx-text-secondary);
+  font-size: var(--nx-font-size-md);
+  cursor: pointer;
+  border-radius: var(--nx-radius-sm);
+  white-space: nowrap;
+  max-width: 220px;
+  flex-shrink: 0;
+  user-select: none;
+  outline: none;
+  transition: all var(--nx-transition-fast);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--nx-accent);
+  outline-offset: -2px;
+}
+
+.tab:hover {
+  background: var(--nx-bg-hover);
+  color: var(--nx-text-primary);
+}
+
+.tab.active {
+  background: var(--nx-bg-active);
+  color: var(--nx-text-primary);
+}
+
+.method {
+  font-weight: 700;
+  font-size: var(--nx-font-size-xs);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--nx-font-size-md);
+}
+
+.dirty {
+  color: var(--nx-accent);
+  font-size: 8px;
+  flex-shrink: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--nx-text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  transition: all var(--nx-transition-fast);
+}
+
+.closeBtn:hover {
+  background: var(--nx-danger-subtle);
+  color: var(--nx-danger);
+}
+
+.addBtn {
+  background: none;
+  border: none;
+  color: var(--nx-text-tertiary);
+  cursor: pointer;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--nx-radius-sm);
+  flex-shrink: 0;
+  transition: all var(--nx-transition-fast);
+}
+
+.addBtn:hover {
+  background: var(--nx-bg-hover);
+  color: var(--nx-text-primary);
+}
