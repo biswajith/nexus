@@ -278,6 +278,31 @@ describe('CurlImporter', () => {
     });
   });
 
+  describe('Chrome DevTools format', () => {
+    it('ignores --compressed flag', () => {
+      const req = importer.import('curl --compressed https://api.example.com');
+      expect(req.url).toBe('https://api.example.com');
+      expect(req.method).toBe('GET');
+    });
+
+    it('handles $-quoted strings from Chrome copy as cURL', () => {
+      const req = importer.import(
+        `curl 'https://api.example.com/users' -H $'Content-Type: application/json' --data-raw $'{"name":"test"}'`,
+      );
+      expect(req.headers[0]!.key).toBe('Content-Type');
+      expect(req.headers[0]!.value).toBe('application/json');
+      expect(req.body.mode).toBe('json');
+      expect(req.body.raw).toBe('{"name":"test"}');
+    });
+
+    it('handles escape sequences in $-quoted strings', () => {
+      const req = importer.import(
+        `curl -d $'line1\\nline2' https://api.example.com`,
+      );
+      expect(req.body.raw).toBe('line1\nline2');
+    });
+  });
+
   describe('complex real-world examples', () => {
     it('parses a full POST with headers, JSON body, and auth', () => {
       const req = importer.import(

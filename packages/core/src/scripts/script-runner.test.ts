@@ -204,6 +204,45 @@ describe('ScriptRunner', () => {
       expect(results[0].logs[0].args).toEqual(['https://api.com']);
     });
 
+    it('sets a collection variable and reads it in a later script in the chain', () => {
+      const coll = makeCollection({
+        preRequestScript: 'nx.collectionVariables.set("step", "init");',
+      });
+      const req = makeRequest({
+        preRequestScript: 'console.log(nx.collectionVariables.get("step"));',
+      });
+      const { results } = runner.runPreRequestChain(coll, req, [], [], []);
+      expect(results).toHaveLength(2);
+      expect(results[1].logs[0].args).toEqual(['init']);
+    });
+
+    it('records collection variable changes in variableChanges', () => {
+      const coll = makeCollection({
+        preRequestScript: 'nx.collectionVariables.set("token", "coll-token");',
+      });
+      const { results } = runner.runPreRequestChain(coll, makeRequest(), [], [], []);
+      expect(results[0].variableChanges).toContainEqual({
+        scope: 'collection',
+        action: 'set',
+        key: 'token',
+        value: 'coll-token',
+      });
+    });
+
+    it('overwrites a collection variable across scripts in the chain', () => {
+      const coll = makeCollection({
+        preRequestScript: 'nx.collectionVariables.set("phase", "pre-coll");',
+      });
+      const req = makeRequest({
+        preRequestScript: `
+          nx.collectionVariables.set("phase", "pre-req");
+          console.log(nx.collectionVariables.get("phase"));
+        `,
+      });
+      const { results } = runner.runPreRequestChain(coll, req, [], [], []);
+      expect(results[1].logs[0].args).toEqual(['pre-req']);
+    });
+
     it('uses envVars for environment scope and globalVars for global scope', () => {
       const envVars = makeVars({ env_key: 'env_val' });
       const globalVars = makeVars({ global_key: 'global_val' });
@@ -297,6 +336,20 @@ describe('ScriptRunner', () => {
       );
       expect(results).toHaveLength(2);
       expect(results[1].logs[0].args).toEqual(['fromResp']);
+    });
+
+    it('sets a collection variable in post-response and reads it in a later post-response script', () => {
+      const req = makeRequest({
+        postResponseScript: 'nx.collectionVariables.set("lastStatus", String(nx.response.code));',
+      });
+      const coll = makeCollection({
+        postResponseScript: 'console.log(nx.collectionVariables.get("lastStatus"));',
+      });
+      const results = runner.runPostResponseChain(
+        coll, req, [], [], [], makeResponse({ code: 201 }),
+      );
+      expect(results).toHaveLength(2);
+      expect(results[1].logs[0].args).toEqual(['201']);
     });
 
     it('parses response JSON in scripts', () => {

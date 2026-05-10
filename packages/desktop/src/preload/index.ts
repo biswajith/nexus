@@ -33,6 +33,7 @@ const api = {
     detectFormat: (data: string) => ipcRenderer.invoke('import:detect-format', data),
     file: (data: string, format?: string) => ipcRenderer.invoke('import:file', data, format),
     save: (collections: unknown[], environments: unknown[]) => ipcRenderer.invoke('import:save', collections, environments),
+    curl: (curlCommand: string) => ipcRenderer.invoke('import:curl', curlCommand),
   },
   export: {
     collection: (collection: unknown, format: string) => ipcRenderer.invoke('export:collection', collection, format),

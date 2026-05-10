@@ -77,8 +77,8 @@ export class CurlImporter {
         // SSL verification disabled
       } else if (token === '-L' || token === '--location') {
         // Follow redirects — default behavior
-      } else if (token === '-v' || token === '--verbose' || token === '-s' || token === '--silent') {
-        // Ignore output flags
+      } else if (token === '-v' || token === '--verbose' || token === '-s' || token === '--silent' || token === '--compressed') {
+        // Ignore output/transport flags
       } else if (!token.startsWith('-') && !url) {
         url = token.replace(/^['"]|['"]$/g, '');
       }
@@ -150,6 +150,11 @@ export class CurlImporter {
     for (let i = 0; i < input.length; i++) {
       const ch = input[i]!;
 
+      if (ch === '$' && input[i + 1] === "'" && !inSingle && !inDouble) {
+        inSingle = true;
+        i++;
+        continue;
+      }
       if (ch === "'" && !inDouble) {
         inSingle = !inSingle;
         continue;
@@ -157,6 +162,14 @@ export class CurlImporter {
       if (ch === '"' && !inSingle) {
         inDouble = !inDouble;
         continue;
+      }
+      if (ch === '\\' && inSingle) {
+        const next = input[i + 1];
+        if (next === 'n') { current += '\n'; i++; continue; }
+        if (next === 't') { current += '\t'; i++; continue; }
+        if (next === 'r') { current += '\r'; i++; continue; }
+        if (next === '\\') { current += '\\'; i++; continue; }
+        if (next === "'") { current += "'"; i++; continue; }
       }
       if (ch === ' ' && !inSingle && !inDouble) {
         if (current) {

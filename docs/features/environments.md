@@ -83,6 +83,40 @@ const resolved = nx.variables.replaceIn("{{base_url}}/users/{{user_id}}");
 
 See the [nx API Reference](../scripting/nx-api-reference.md) for the complete scripting API.
 
+## Setting Collection Variables from Scripts
+
+Collection variables are scoped to the collection and persist for the lifetime of a run. They are useful for sharing state across requests in the same collection — for example, extracting a value from one response and using it in the next request.
+
+**Post-response script on a "Login" request:**
+
+```javascript
+// Extract the token from the response and store it as a collection variable
+const data = nx.response.json();
+nx.collectionVariables.set("auth_token", data.token);
+```
+
+**Pre-request script on any subsequent request in the same collection:**
+
+```javascript
+// Read the token set by a previous request
+const token = nx.collectionVariables.get("auth_token");
+nx.request.headers = {
+  ...nx.request.headers,
+  "Authorization": `Bearer ${token}`,
+};
+```
+
+The full `nx.collectionVariables` API:
+
+```javascript
+nx.collectionVariables.get("key");           // Read a value
+nx.collectionVariables.set("key", "value");  // Write a value
+nx.collectionVariables.unset("key");         // Delete a value
+nx.collectionVariables.toObject();           // Snapshot as a plain object
+```
+
+Collection variables are initialized from the `variables` array in `collection.json` and any changes made during a run are applied in-memory. They are **not** written back to disk after the run unless your script explicitly persists them.
+
 ## Dynamic Variables
 
 Nexus includes 119 built-in dynamic variables that generate random data on each request. Use them with the `$` prefix:

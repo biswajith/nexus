@@ -392,6 +392,10 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     return results;
   });
 
+  ipcMain.handle('import:curl', async (_event, curlCommand: string) => {
+    return curlImporter.import(curlCommand);
+  });
+
   ipcMain.handle('export:collection', async (_event, collection: NexusCollection, format: 'nexus' | 'postman-v2.1') => {
     if (format === 'postman-v2.1') {
       return nexusExporter.exportAsPostmanV21(collection);

@@ -140,6 +140,25 @@ export function RequestBuilder({ tab }: RequestBuilderProps) {
   const paramCount = tab.request.params.filter((p) => p.enabled && p.key).length;
   const headerCount = tab.request.headers.filter((h) => h.enabled && h.key).length;
 
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (!text.startsWith('curl ') && !text.startsWith('curl\t')) return;
+
+    e.preventDefault();
+    try {
+      const parsed = await window.nexus.import.curl(text) as NexusRequest;
+      updateRequest(tab.id, {
+        method: parsed.method,
+        url: parsed.url,
+        headers: parsed.headers,
+        params: parsed.params,
+        body: parsed.body,
+      });
+    } catch {
+      setUrl(tab.id, text);
+    }
+  }, [tab.id, updateRequest, setUrl]);
+
   const handleCopyCurl = useCallback(async () => {
     const nexusReq = {
       id: tab.id,
@@ -179,6 +198,7 @@ export function RequestBuilder({ tab }: RequestBuilderProps) {
           placeholder="Enter request URL or paste cURL"
           value={tab.request.url}
           onChange={(e) => setUrl(tab.id, e.target.value)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !tab.loading) {
               sendRequest(tab.id);

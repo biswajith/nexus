@@ -180,6 +180,46 @@ describe('ScriptSandbox', () => {
       expect(result.logs[0].args).toEqual(['https://api.com']);
     });
 
+    it('sets collection variables and records changes', () => {
+      const s = new ScriptSandbox();
+      const collScope = s.createTrackedScope('collection', []);
+      const ctx = makeContext({ collectionVariables: collScope });
+      const script = `
+        nx.collectionVariables.set("version", "v2");
+        console.log(nx.collectionVariables.get("version"));
+      `;
+      const result = s.execute(script, ctx);
+      expect(result.logs[0].args).toEqual(['v2']);
+      expect(result.variableChanges).toContainEqual({
+        scope: 'collection',
+        action: 'set',
+        key: 'version',
+        value: 'v2',
+      });
+    });
+
+    it('unsets collection variables and records changes', () => {
+      const s = new ScriptSandbox();
+      const collScope = s.createTrackedScope('collection', makeVars({ deprecated: 'old' }));
+      const ctx = makeContext({ collectionVariables: collScope });
+      const script = `nx.collectionVariables.unset("deprecated");`;
+      const result = s.execute(script, ctx);
+      expect(result.variableChanges).toContainEqual({
+        scope: 'collection',
+        action: 'unset',
+        key: 'deprecated',
+      });
+    });
+
+    it('nx.collectionVariables.toObject returns current collection variables', () => {
+      const s = new ScriptSandbox();
+      const collScope = s.createTrackedScope('collection', makeVars({ host: 'api.com', version: 'v1' }));
+      const ctx = makeContext({ collectionVariables: collScope });
+      const script = `console.log(JSON.stringify(nx.collectionVariables.toObject()));`;
+      const result = s.execute(script, ctx);
+      expect(JSON.parse(result.logs[0].args[0] as string)).toEqual({ host: 'api.com', version: 'v1' });
+    });
+
     it('reads global variables', () => {
       const s = new ScriptSandbox();
       const globalScope = s.createTrackedScope('global', makeVars({ apiKey: 'key123' }));
