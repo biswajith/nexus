@@ -10,7 +10,7 @@ export function generateCurl(request: NexusRequest): string {
   const parts: string[] = ['curl'];
 
   if (request.method !== 'GET') {
-    parts.push(`-X ${request.method}`);
+    parts.push(`-X ${/^[A-Za-z]+$/.test(request.method) ? request.method : shellQuote(request.method)}`);
   }
 
   let url = request.url;
@@ -21,26 +21,26 @@ export function generateCurl(request: NexusRequest): string {
       .join('&');
     url += (url.includes('?') ? '&' : '?') + qs;
   }
-  parts.push(`'${url}'`);
+  parts.push(shellQuote(url));
 
   for (const h of request.headers.filter((h) => h.enabled && h.key)) {
-    parts.push(`-H '${h.key}: ${h.value}'`);
+    parts.push(`-H ${shellQuote(`${h.key}: ${h.value}`)}`);
   }
 
   if (request.auth.type === 'bearer') {
     const token = String(request.auth.token ?? '');
     if (token) {
-      parts.push(`-H 'Authorization: Bearer ${token}'`);
+      parts.push(`-H ${shellQuote(`Authorization: Bearer ${token}`)}`);
     }
   } else if (request.auth.type === 'basic') {
     const user = String(request.auth.username ?? '');
     const pass = String(request.auth.password ?? '');
-    parts.push(`-u '${user}:${pass}'`);
+    parts.push(`-u ${shellQuote(`${user}:${pass}`)}`);
   } else if (request.auth.type === 'api-key' && request.auth.addTo === 'header') {
     const key = String(request.auth.key ?? '');
     const value = String(request.auth.value ?? '');
     if (key && value) {
-      parts.push(`-H '${key}: ${value}'`);
+      parts.push(`-H ${shellQuote(`${key}: ${value}`)}`);
     }
   }
 
@@ -58,16 +58,18 @@ export function generateCurl(request: NexusRequest): string {
         };
         const ct = contentTypes[request.body.mode];
         if (ct && !request.headers.some((h) => h.enabled && h.key.toLowerCase() === 'content-type')) {
-          parts.push(`-H 'Content-Type: ${ct}'`);
+          parts.push(`-H ${shellQuote(`Content-Type: ${ct}`)}`);
         }
-        parts.push(`-d '${escapeShell(request.body.raw)}'`);
+        // --data-raw: with -d, a body starting with "@" makes curl read and send a local file.
+        parts.push(`--data-raw ${shellQuote(request.body.raw)}`);
       }
       break;
     }
     case 'x-www-form-urlencoded': {
       for (const kv of request.body.urlencoded ?? []) {
         if (kv.enabled) {
-          parts.push(`--data-urlencode '${kv.key}=${kv.value}'`);
+          // Encoding the name keeps "@" out of it, which curl would read as "name@filename".
+          parts.push(`--data-urlencode ${shellQuote(`${encodeURIComponent(kv.key)}=${kv.value}`)}`);
         }
       }
       break;
@@ -76,9 +78,10 @@ export function generateCurl(request: NexusRequest): string {
       for (const fd of request.body.formData ?? []) {
         if (fd.enabled) {
           if (fd.type === 'file') {
-            parts.push(`-F '${fd.key}=@${fd.value}'`);
+            parts.push(`-F ${shellQuote(`${fd.key}=@${fd.value}`)}`);
           } else {
-            parts.push(`-F '${fd.key}=${fd.value}'`);
+            // --form-string: with -F, a value starting with "@" or "<" reads a local file.
+            parts.push(`--form-string ${shellQuote(`${fd.key}=${fd.value}`)}`);
           }
         }
       }
@@ -86,7 +89,7 @@ export function generateCurl(request: NexusRequest): string {
     }
     case 'binary': {
       if (request.body.binary?.path) {
-        parts.push(`--data-binary '@${request.body.binary.path}'`);
+        parts.push(`--data-binary ${shellQuote(`@${request.body.binary.path}`)}`);
       }
       break;
     }
@@ -99,7 +102,7 @@ export function generateCurl(request: NexusRequest): string {
         if (!request.headers.some((h) => h.enabled && h.key.toLowerCase() === 'content-type')) {
           parts.push(`-H 'Content-Type: application/json'`);
         }
-        parts.push(`-d '${escapeShell(gqlBody)}'`);
+        parts.push(`--data-raw ${shellQuote(gqlBody)}`);
       }
       break;
     }
@@ -115,23 +118,27 @@ export function generateCurl(request: NexusRequest): string {
     parts.push('-k');
   }
 
-  if (request.settings.timeout) {
-    parts.push(`--max-time ${Math.ceil(request.settings.timeout / 1000)}`);
+  // Settings come from imported files too, so only finite numbers reach the command line.
+  const timeout = Number(request.settings.timeout);
+  if (Number.isFinite(timeout) && timeout > 0) {
+    parts.push(`--max-time ${Math.ceil(timeout / 1000)}`);
   }
 
-  if (request.settings.maxRedirects) {
-    parts.push(`--max-redirs ${request.settings.maxRedirects}`);
+  const maxRedirects = Number(request.settings.maxRedirects);
+  if (Number.isInteger(maxRedirects) && maxRedirects > 0) {
+    parts.push(`--max-redirs ${maxRedirects}`);
   }
 
   return parts.join(' \\\n  ');
 }
 
 /**
- * Escapes a string for use inside single quotes in a POSIX shell (replaces `'` with `'\''`).
+ * Quotes one argument for a POSIX shell: wraps it in single quotes and replaces each `'` with `'\''`.
+ * Every request-derived value in the command must go through this.
  *
- * @param str - Raw text that will be embedded in a single-quoted curl argument.
- * @returns The same text with single-quote characters safely escaped.
+ * @param str - Raw argument text.
+ * @returns A single shell word that expands to exactly `str`.
  */
-function escapeShell(str: string): string {
-  return str.replace(/'/g, "'\\''");
+export function shellQuote(str: string): string {
+  return `'${String(str).replace(/'/g, "'\\''")}'`;
 }

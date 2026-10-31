@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateCurl } from './curl-generator.js';
+import { execFileSync } from 'node:child_process';
+import { generateCurl, shellQuote } from './curl-generator.js';
 import type { NexusRequest } from '../types/index.js';
 
 function makeRequest(overrides?: Partial<NexusRequest>): NexusRequest {
@@ -165,7 +166,7 @@ describe('generateCurl', () => {
         body: { mode: 'json', raw: '{"key":"value"}' },
       }));
       expect(result).toContain("-H 'Content-Type: application/json'");
-      expect(result).toContain("-d '{\"key\":\"value\"}'");
+      expect(result).toContain("--data-raw '{\"key\":\"value\"}'");
     });
 
     it('sends XML body with Content-Type', () => {
@@ -174,7 +175,7 @@ describe('generateCurl', () => {
         body: { mode: 'xml', raw: '<root/>' },
       }));
       expect(result).toContain("-H 'Content-Type: application/xml'");
-      expect(result).toContain("-d '<root/>'");
+      expect(result).toContain("--data-raw '<root/>'");
     });
 
     it('sends HTML body with Content-Type', () => {
@@ -191,7 +192,7 @@ describe('generateCurl', () => {
         body: { mode: 'text', raw: 'hello' },
       }));
       expect(result).toContain("-H 'Content-Type: text/plain'");
-      expect(result).toContain("-d 'hello'");
+      expect(result).toContain("--data-raw 'hello'");
     });
 
     it('does not add Content-Type if already present in headers', () => {
@@ -209,7 +210,7 @@ describe('generateCurl', () => {
         method: 'POST',
         body: { mode: 'json', raw: '' },
       }));
-      expect(result).not.toContain("-d ");
+      expect(result).not.toContain("--data-raw");
     });
 
     it('escapes single quotes in body', () => {
@@ -245,7 +246,7 @@ describe('generateCurl', () => {
           ],
         },
       }));
-      expect(result).toContain("-F 'name=John'");
+      expect(result).toContain("--form-string 'name=John'");
     });
 
     it('sends form-data file entries with @ prefix', () => {
@@ -272,6 +273,7 @@ describe('generateCurl', () => {
         },
       }));
       expect(result).not.toContain('-F');
+      expect(result).not.toContain('--form-string');
     });
 
     it('sends binary body with --data-binary', () => {
@@ -299,7 +301,7 @@ describe('generateCurl', () => {
         },
       }));
       expect(result).toContain("-H 'Content-Type: application/json'");
-      expect(result).toContain("-d ");
+      expect(result).toContain("--data-raw ");
       expect(result).toContain('users');
     });
 
@@ -323,7 +325,7 @@ describe('generateCurl', () => {
         method: 'POST',
         body: { mode: 'graphql', graphql: { query: '' } },
       }));
-      expect(result).not.toContain("-d ");
+      expect(result).not.toContain("--data-raw");
     });
   });
 
@@ -378,6 +380,73 @@ describe('generateCurl', () => {
     it('joins parts with line continuation', () => {
       const result = generateCurl(makeRequest({ method: 'POST' }));
       expect(result).toContain(' \\\n  ');
+    });
+  });
+
+  describe('shell safety', () => {
+    // Runs the generated command in a real POSIX shell with `curl` replaced by a
+    // function that prints its arguments, so we compare exactly what curl would receive.
+    function shellArgs(command: string): string[] {
+      const out = execFileSync('sh', ['-c', `curl() { printf '%s\\0' "$@"; }\n${command}`], {
+        env: {},
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      return out.split('\0').slice(0, -1);
+    }
+
+    const payload = "x'; echo INJECTED; '$(echo INJECTED)`echo INJECTED`";
+
+    it('shellQuote round-trips through sh', () => {
+      expect(shellArgs(`curl ${shellQuote(payload)}`)).toEqual([payload]);
+    });
+
+    it.each([
+      ['url', { url: `https://h.test/${payload}` }],
+      ['method', { method: payload as NexusRequest['method'] }],
+      ['header', { headers: [{ key: 'X-A', value: payload, enabled: true }] }],
+      ['bearer token', { auth: { type: 'bearer', token: payload } }],
+      ['basic auth', { auth: { type: 'basic', username: payload, password: payload } }],
+      ['api key', { auth: { type: 'api-key', addTo: 'header', key: 'K', value: payload } }],
+      ['raw body', { method: 'POST', body: { mode: 'text', raw: payload } }],
+      ['urlencoded', { method: 'POST', body: { mode: 'x-www-form-urlencoded', urlencoded: [{ key: payload, value: payload, enabled: true }] } }],
+      ['form-data text', { method: 'POST', body: { mode: 'form-data', formData: [{ key: payload, value: payload, type: 'text', enabled: true }] } }],
+      ['form-data file', { method: 'POST', body: { mode: 'form-data', formData: [{ key: 'f', value: payload, type: 'file', enabled: true }] } }],
+      ['binary path', { method: 'POST', body: { mode: 'binary', binary: { path: payload } } }],
+      ['graphql', { method: 'POST', body: { mode: 'graphql', graphql: { query: payload } } }],
+      ['settings', { settings: { timeout: `1; echo INJECTED` as unknown as number, maxRedirects: `1; echo INJECTED` as unknown as number } }],
+    ] as Array<[string, Partial<NexusRequest>]>)('does not let a %s break out of its argument', (_label, overrides) => {
+      const command = generateCurl(makeRequest(overrides));
+      const args = shellArgs(command);
+      expect(args).not.toContain('INJECTED');
+      expect(args.join('\n')).not.toMatch(/^INJECTED$/m);
+      // Every injected payload is still passed through intact inside one argument.
+      if (!('settings' in overrides)) {
+        expect(args.some((a) => a.includes("x'; echo INJECTED;"))).toBe(true);
+      }
+    });
+
+    it('sends raw bodies with --data-raw so "@file" is not read', () => {
+      const result = generateCurl(makeRequest({ method: 'POST', body: { mode: 'text', raw: '@/etc/passwd' } }));
+      expect(result).toContain("--data-raw '@/etc/passwd'");
+      expect(result).not.toMatch(/(^|\s)-d /);
+    });
+
+    it('sends form-data text values with --form-string so "@file" and "<file" are not read', () => {
+      const result = generateCurl(makeRequest({
+        method: 'POST',
+        body: { mode: 'form-data', formData: [{ key: 'a', value: '@/etc/passwd', type: 'text', enabled: true }] },
+      }));
+      expect(result).toContain("--form-string 'a=@/etc/passwd'");
+      expect(result).not.toContain('-F ');
+    });
+
+    it('encodes urlencoded names so "name@file" is not read', () => {
+      const result = generateCurl(makeRequest({
+        method: 'POST',
+        body: { mode: 'x-www-form-urlencoded', urlencoded: [{ key: 'a@/etc/passwd', value: 'v', enabled: true }] },
+      }));
+      expect(result).toContain("--data-urlencode 'a%40%2Fetc%2Fpasswd=v'");
     });
   });
 });

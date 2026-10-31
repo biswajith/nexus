@@ -1,8 +1,16 @@
 import * as vm from 'node:vm';
+import { randomUUID } from 'node:crypto';
+import { types } from 'node:util';
 import type { Variable } from '../types/index.js';
 import { AssertionEngine } from './assertions.js';
 import type { TestResult } from './assertions.js';
 import { VariableStore } from '../environments/variable-store.js';
+import { sandboxRuntime } from './sandbox-runtime.js';
+
+interface RuntimeHandle {
+  run: unknown;
+  collect: unknown;
+}
 
 export interface ScriptContext {
   environment: VariableScopeAccess;
@@ -70,6 +78,21 @@ export interface VariableChange {
 }
 
 /**
+ * Reads an error message without running script code: proxies and accessors are never touched,
+ * because a thrown value may come from the script's realm.
+ * @param err - Value caught from the vm.
+ * @returns The message, or a generic fallback.
+ */
+function safeErrorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (types.isNativeError(err)) {
+    const desc = Object.getOwnPropertyDescriptor(err, 'message');
+    if (desc && typeof desc.value === 'string') return desc.value;
+  }
+  return 'Script error';
+}
+
+/**
  * Variable scope that records set/unset operations for merging into {@link ScriptResult.variableChanges}.
  */
 class TrackedScope implements VariableScopeAccess {
@@ -132,7 +155,8 @@ class TrackedScope implements VariableScopeAccess {
 }
 
 /**
- * Runs Nexus scripts in an isolated Node `vm` context with a constrained global and `nx` API surface.
+ * Runs Nexus scripts in a Node `vm` context. The `nx` API and `console` are built inside the
+ * context by {@link sandboxRuntime}; the host talks to them only through JSON strings.
  */
 export class ScriptSandbox {
   private timeoutMs: number;
@@ -152,144 +176,188 @@ export class ScriptSandbox {
    */
   execute(script: string, context: ScriptContext): ScriptResult {
     const logs: LogEntry[] = [];
-    const assertionEngine = new AssertionEngine();
+    const testResults: TestResult[] = [];
     const executionControl: ExecutionControl = {
       nextRequest: undefined,
       skipped: false,
+    };
+    const result: ScriptResult = {
+      logs,
+      testResults,
+      variableChanges: [],
+      executionControl,
     };
 
     const envScope = context.environment as TrackedScope;
     const collScope = context.collectionVariables as TrackedScope;
     const globalScope = context.globals as TrackedScope;
+    const scopes: Record<string, VariableScopeAccess> = {
+      environment: envScope,
+      collectionVariables: collScope,
+      globals: globalScope,
+    };
+    const ajv = new AssertionEngine();
 
-    const mutableRequest = { ...context.request };
-
-    const nx: Record<string, unknown> = {
-      environment: {
-        get: (key: string) => envScope.get(key),
-        set: (key: string, value: string) => envScope.set(key, value),
-        unset: (key: string) => envScope.unset(key),
-        toObject: () => envScope.toObject(),
-      },
-      collectionVariables: {
-        get: (key: string) => collScope.get(key),
-        set: (key: string, value: string) => collScope.set(key, value),
-        unset: (key: string) => collScope.unset(key),
-        toObject: () => collScope.toObject(),
-      },
-      globals: {
-        get: (key: string) => globalScope.get(key),
-        set: (key: string, value: string) => globalScope.set(key, value),
-        unset: (key: string) => globalScope.unset(key),
-        toObject: () => globalScope.toObject(),
-      },
-      variables: {
-        get: (key: string) => {
+    // Every argument and return value crossing into the context is a JSON string,
+    // so scripts never hold a host-realm object (see sandbox-runtime.ts).
+    const handle = (op: string, args: unknown[]): unknown => {
+      const str = (i: number): string => {
+        const v = args[i];
+        if (typeof v !== 'string') throw new Error(`invalid argument to ${op}`);
+        return v;
+      };
+      const [scopeName, method] = op.split('.');
+      const scope = scopeName !== undefined ? scopes[scopeName] : undefined;
+      if (scope && method) {
+        switch (method) {
+          case 'get': return scope.get(str(0));
+          case 'set': scope.set(str(0), str(1)); return undefined;
+          case 'unset': scope.unset(str(0)); return undefined;
+          case 'toObject': return JSON.stringify(scope.toObject());
+        }
+      }
+      switch (op) {
+        case 'variables.get': {
+          const key = str(0);
           return envScope.get(key) ?? collScope.get(key) ?? globalScope.get(key);
-        },
-        set: (key: string, value: string) => {
-          envScope.set(key, value);
-        },
-        replaceIn: (template: string) => {
-          const dynamicResolver = new VariableStore();
-          return template.replace(/\{\{(.+?)\}\}/g, (match, key: string) => {
-            const trimmed = key.trim();
-            if (trimmed.startsWith('$')) {
-              const resolved = dynamicResolver.resolve(`{{${trimmed}}}`);
-              return resolved === `{{${trimmed}}}` ? match : resolved;
-            }
-            return envScope.get(trimmed)
-              ?? collScope.get(trimmed)
-              ?? globalScope.get(trimmed)
-              ?? match;
-          });
-        },
-      },
-      request: {
-        get url() { return mutableRequest.url; },
-        set url(v: string) { mutableRequest.url = v; },
-        get method() { return mutableRequest.method; },
-        set method(v: string) { mutableRequest.method = v; },
-        get headers() { return mutableRequest.headers; },
-        set headers(v: Record<string, string>) { mutableRequest.headers = v; },
-        get body() { return mutableRequest.body; },
-        set body(v: string | null | undefined) { mutableRequest.body = v; },
-      },
-      execution: {
-        setNextRequest: (name: string | null) => {
-          executionControl.nextRequest = name;
-        },
-        skipRequest: () => {
+        }
+        case 'replaceIn': return this.replaceIn(str(0), envScope, collScope, globalScope);
+        case 'setNextRequest':
+          executionControl.nextRequest = args[0] === null ? null : str(0);
+          return undefined;
+        case 'skipRequest':
           executionControl.skipped = true;
-        },
+          return undefined;
+        case 'log': {
+          const level = str(0);
+          if (level !== 'log' && level !== 'warn' && level !== 'error' && level !== 'info') {
+            throw new Error('invalid log level');
+          }
+          const encoded = JSON.parse(str(1)) as Array<{ j?: string; s?: string; u?: 1 }>;
+          logs.push({
+            level,
+            args: encoded.map((a) => (a.u ? undefined : a.j !== undefined ? JSON.parse(a.j) : String(a.s))),
+            timestamp: typeof args[2] === 'number' ? args[2] : Date.now(),
+          });
+          return undefined;
+        }
+        case 'test': {
+          const error = args[2];
+          testResults.push({
+            name: str(0),
+            passed: args[1] === true,
+            ...(typeof error === 'string' ? { error } : {}),
+            duration: typeof args[3] === 'number' ? args[3] : 0,
+          });
+          return undefined;
+        }
+        case 'matchSchema': {
+          const { v } = JSON.parse(str(0)) as { v: unknown };
+          const schema = JSON.parse(str(1)) as Record<string, unknown>;
+          try {
+            ajv.expect(v).matchSchema(schema);
+            return { pass: true, errors: '' };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { pass: false, errors: message.replace(/^schema validation failed: /, '') };
+          }
+        }
+        case 'visualizer': {
+          if (!context.visualizer) throw new Error('visualizer unavailable');
+          const data = args[1] === null ? undefined : JSON.parse(str(1));
+          context.visualizer.set(str(0), data);
+          return undefined;
+        }
+        case 'error':
+          result.error = str(0);
+          return undefined;
+      }
+      throw new Error(`unknown operation ${op}`);
+    };
+
+    const host = (op: string, argsJson: string): string => {
+      try {
+        if (typeof op !== 'string' || typeof argsJson !== 'string') throw new Error('invalid host call');
+        const args = JSON.parse(argsJson) as unknown;
+        if (!Array.isArray(args)) throw new Error('invalid host call');
+        return JSON.stringify({ ok: true, v: handle(op, args) });
+      } catch (err) {
+        return JSON.stringify({ ok: false, e: err instanceof Error ? err.message : String(err) });
+      }
+    };
+
+    const resp = context.response;
+    let responsePayload: Record<string, unknown> | undefined;
+    if (resp) {
+      let json: { ok: boolean; v?: unknown; e?: string };
+      try {
+        json = { ok: true, v: resp.json() };
+      } catch (err) {
+        json = { ok: false, e: err instanceof Error ? err.message : String(err) };
+      }
+      responsePayload = {
+        code: resp.code,
+        status: resp.status,
+        headers: resp.headers,
+        responseTime: resp.responseTime,
+        text: resp.text(),
+        json,
+      };
+    }
+
+    const payload = JSON.stringify({
+      request: {
+        url: context.request.url,
+        method: context.request.method,
+        headers: context.request.headers,
+        body: context.request.body ?? null,
+        bodyUndefined: context.request.body === undefined,
       },
-      test: (name: string, fn: () => void) => assertionEngine.test(name, fn),
-      expect: (value: unknown) => assertionEngine.expect(value),
-    };
-
-    if (context.response) {
-      const resp = context.response;
-      nx.response = {
-        get code() { return resp.code; },
-        get status() { return resp.status; },
-        get headers() { return resp.headers; },
-        get responseTime() { return resp.responseTime; },
-        json: () => resp.json(),
-        text: () => resp.text(),
-      };
-    }
-
-    if (context.visualizer) {
-      nx.visualizer = {
-        set: (template: string, data: unknown) => context.visualizer!.set(template, data),
-      };
-    }
-
-    const consoleMethods = {
-      log: (...args: unknown[]) => logs.push({ level: 'log', args, timestamp: Date.now() }),
-      warn: (...args: unknown[]) => logs.push({ level: 'warn', args, timestamp: Date.now() }),
-      error: (...args: unknown[]) => logs.push({ level: 'error', args, timestamp: Date.now() }),
-      info: (...args: unknown[]) => logs.push({ level: 'info', args, timestamp: Date.now() }),
-    };
-
-    const sandbox = {
-      nx,
-      console: consoleMethods,
-      setTimeout: undefined,
-      setInterval: undefined,
-      setImmediate: undefined,
-      process: undefined,
-      require: undefined,
-      __filename: undefined,
-      __dirname: undefined,
-      global: undefined,
-      globalThis: undefined,
-    };
-
-    const vmContext = vm.createContext(sandbox, {
-      codeGeneration: { strings: false, wasm: false },
+      response: responsePayload,
+      visualizer: Boolean(context.visualizer),
     });
 
-    const result: ScriptResult = {
-      logs,
-      testResults: [],
-      variableChanges: [],
-      executionControl,
-    };
+    // A null-prototype sandbox keeps `this.constructor` lookups inside the context realm.
+    const vmContext = vm.createContext(Object.create(null) as object, {
+      codeGeneration: { strings: false, wasm: false },
+      microtaskMode: 'afterEvaluate',
+    });
 
+    let finalRequest: MutableRequest | undefined;
     try {
-      const compiledScript = new vm.Script(script, {
-        filename: 'nexus-script.js',
-      });
-      compiledScript.runInContext(vmContext, {
-        timeout: this.timeoutMs,
-        breakOnSigint: true,
-      });
+      const install = new vm.Script(`(${sandboxRuntime.toString()}).bind(this)`, {
+        filename: 'nexus-runtime.js',
+      }).runInContext(vmContext) as (h: typeof host, p: string) => RuntimeHandle;
+      const runtime = install(host, payload);
+
+      let userFn: unknown;
+      try {
+        userFn = vm.compileFunction(script, [], {
+          filename: 'nexus-script.js',
+          parsingContext: vmContext,
+        });
+      } catch (err) {
+        result.error = safeErrorMessage(err);
+      }
+
+      if (userFn !== undefined) {
+        this.runTimed(vmContext, runtime.run, userFn);
+      }
+      const collected = this.runTimed(vmContext, runtime.collect);
+      if (typeof collected === 'string') {
+        const parsed = JSON.parse(collected) as MutableRequest & { bodyUndefined: boolean };
+        finalRequest = {
+          url: parsed.url,
+          method: parsed.method,
+          headers: parsed.headers,
+          body: parsed.bodyUndefined ? undefined : parsed.body,
+        };
+      }
     } catch (err) {
-      result.error = err instanceof Error ? err.message : String(err);
+      // Only engine errors (timeout, SIGINT, stack limits) arrive here.
+      result.error ??= safeErrorMessage(err);
     }
 
-    result.testResults = assertionEngine.getResults();
     result.variableChanges = [
       ...envScope.changes,
       ...collScope.changes,
@@ -297,20 +365,62 @@ export class ScriptSandbox {
     ];
 
     if (
-      mutableRequest.url !== context.request.url ||
-      mutableRequest.method !== context.request.method ||
-      mutableRequest.headers !== context.request.headers ||
-      mutableRequest.body !== context.request.body
+      finalRequest &&
+      (finalRequest.url !== context.request.url ||
+        finalRequest.method !== context.request.method ||
+        JSON.stringify(finalRequest.headers) !== JSON.stringify(context.request.headers) ||
+        finalRequest.body !== context.request.body)
     ) {
-      result.requestMutations = {
-        url: mutableRequest.url,
-        method: mutableRequest.method,
-        headers: mutableRequest.headers,
-        body: mutableRequest.body,
-      };
+      result.requestMutations = { ...finalRequest };
     }
 
     return result;
+  }
+
+  /**
+   * Calls an in-realm function under the execution timeout. The function and its
+   * argument are parked on the context global under a random key only for the call.
+   * @param vmContext - Context created by {@link execute}.
+   * @param fn - In-realm function to call.
+   * @param arg - Optional in-realm argument.
+   * @returns The function's return value (only primitives are trusted by callers).
+   */
+  private runTimed(vmContext: vm.Context, fn: unknown, arg?: unknown): unknown {
+    // Two separate properties: packing them into a host array would hand scripts a host object.
+    const key = `__nx_${randomUUID().replace(/-/g, '')}`;
+    Object.defineProperty(vmContext, `${key}_f`, { value: fn, configurable: true });
+    Object.defineProperty(vmContext, `${key}_a`, { value: arg, configurable: true });
+    return new vm.Script(
+      `(() => { const f = this.${key}_f, a = this.${key}_a; delete this.${key}_f; delete this.${key}_a; return f(a); })()`,
+      { filename: 'nexus-runner.js' },
+    ).runInContext(vmContext, {
+      timeout: this.timeoutMs,
+      breakOnSigint: true,
+    });
+  }
+
+  /**
+   * Resolves `{{var}}` and `{{$dynamic}}` placeholders for `nx.variables.replaceIn`.
+   * @returns The template with known placeholders replaced.
+   */
+  private replaceIn(
+    template: string,
+    envScope: VariableScopeAccess,
+    collScope: VariableScopeAccess,
+    globalScope: VariableScopeAccess,
+  ): string {
+    const dynamicResolver = new VariableStore();
+    return template.replace(/\{\{(.+?)\}\}/g, (match, key: string) => {
+      const trimmed = key.trim();
+      if (trimmed.startsWith('$')) {
+        const resolved = dynamicResolver.resolve(`{{${trimmed}}}`);
+        return resolved === `{{${trimmed}}}` ? match : resolved;
+      }
+      return envScope.get(trimmed)
+        ?? collScope.get(trimmed)
+        ?? globalScope.get(trimmed)
+        ?? match;
+    });
   }
 
   /**

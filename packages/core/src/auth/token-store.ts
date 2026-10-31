@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { writePrivateFile } from '../fs/private-fs.js';
 
 export interface StoredToken {
   accessToken: string;
@@ -96,6 +97,6 @@ export class TokenStore {
     for (const [k, v] of this.tokens) {
       obj[k] = v;
     }
-    await fs.writeFile(this.filePath, JSON.stringify(obj, null, 2));
+    await writePrivateFile(this.filePath, JSON.stringify(obj, null, 2));
   }
 }

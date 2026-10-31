@@ -1,5 +1,6 @@
 import { CookieJar, Cookie } from 'tough-cookie';
 import * as fs from 'node:fs/promises';
+import { writePrivateFile } from '../fs/private-fs.js';
 
 /**
  * Wraps a tough-cookie jar with optional JSON persistence to disk for HTTP requests and responses.
@@ -148,6 +149,6 @@ export class NexusCookieJar {
   private async persist(): Promise<void> {
     if (!this.persistPath) return;
     const serialized = await this.jar.serialize();
-    await fs.writeFile(this.persistPath, JSON.stringify(serialized, null, 2));
+    await writePrivateFile(this.persistPath, JSON.stringify(serialized, null, 2));
   }
 }

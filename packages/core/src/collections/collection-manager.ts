@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { NexusCollection, NexusRequest, NexusFolder } from '../types/index.js';
 import { isFolder } from '../types/index.js';
+import { ensurePrivateDir, writePrivateFile, PRIVATE_DIR_MODE } from '../fs/private-fs.js';
 
 interface CollectionMeta {
   id: string;
@@ -25,7 +26,7 @@ export class CollectionManager {
    * @returns A promise that resolves when the directory is ready.
    */
   async ensureDirectory(): Promise<void> {
-    await fs.mkdir(this.basePath, { recursive: true });
+    await ensurePrivateDir(this.basePath);
   }
 
   /**
@@ -158,25 +159,62 @@ export class CollectionManager {
   /**
    * Writes a new collection directory (slug from name), `collection.json`, and all requests and folders.
    * @param collection - Collection to persist, including nested folder items.
-   * @returns A promise that resolves when files and directories are written.
+   * @returns The directory name the collection was written to (unique under the base path).
    */
-  async createCollection(collection: NexusCollection): Promise<void> {
-    const slug = this.slugify(collection.name);
-    const collectionDir = path.join(this.basePath, slug);
-    await fs.mkdir(path.join(collectionDir, 'requests'), { recursive: true });
-    await fs.mkdir(path.join(collectionDir, 'folders'), { recursive: true });
+  async createCollection(collection: NexusCollection): Promise<string> {
+    await this.ensureDirectory();
+    const collectionDir = await this.claimDirectory(this.basePath, this.slugify(collection.name) || 'collection');
+    await fs.mkdir(path.join(collectionDir, 'requests'), { recursive: true, mode: PRIVATE_DIR_MODE });
+    await fs.mkdir(path.join(collectionDir, 'folders'), { recursive: true, mode: PRIVATE_DIR_MODE });
 
     const { items: _items, ...meta } = collection;
-    await fs.writeFile(
-      path.join(collectionDir, 'collection.json'),
-      JSON.stringify({ ...meta, itemOrder: collection.items.map((i) => i.id) }, null, 2),
-    );
+    await writePrivateFile(path.join(collectionDir, 'collection.json'), JSON.stringify({ ...meta, itemOrder: collection.items.map((i) => i.id) }, null, 2));
 
     for (const item of collection.items) {
       if (isFolder(item)) {
-        await this.saveFolder(path.join(collectionDir, 'folders', this.slugify(item.name)), item);
+        await this.saveFolder(await this.claimDirectory(path.join(collectionDir, 'folders'), this.slugify(item.name) || 'folder'), item);
       } else {
         await this.saveRequest(collectionDir, item);
+      }
+    }
+    return path.basename(collectionDir);
+  }
+
+  /**
+   * Creates a new directory named `slug` under `parent`, adding `-2`, `-3`, … when the name is
+   * taken. `mkdir` without `recursive` fails on an existing directory, so a create never reuses
+   * (and overwrites) another collection's or folder's directory.
+   * @param parent - Existing parent directory.
+   * @param slug - Preferred directory name.
+   * @returns Absolute path of the directory that was created.
+   */
+  private async claimDirectory(parent: string, slug: string): Promise<string> {
+    for (let n = 1; ; n++) {
+      const dir = path.join(parent, n === 1 ? slug : `${slug}-${n}`);
+      try {
+        await fs.mkdir(dir, { mode: PRIVATE_DIR_MODE });
+        return dir;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      }
+    }
+  }
+
+  /**
+   * Writes `data` to a new file `<slug>.json` in `dir`, adding `-2`, `-3`, … when the name is
+   * taken, so two items with the same name never overwrite each other.
+   * @param dir - Existing directory.
+   * @param slug - Preferred file name without extension.
+   * @param data - File contents.
+   */
+  private async writeNewFile(dir: string, slug: string, data: string): Promise<void> {
+    for (let n = 1; ; n++) {
+      const file = path.join(dir, `${n === 1 ? slug : `${slug}-${n}`}.json`);
+      try {
+        await writePrivateFile(file, data, 'wx');
+        return;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
       }
     }
   }
@@ -189,12 +227,8 @@ export class CollectionManager {
    */
   async saveRequest(collectionDir: string, request: NexusRequest): Promise<void> {
     const requestsDir = path.join(collectionDir, 'requests');
-    await fs.mkdir(requestsDir, { recursive: true });
-    const fileName = `${this.slugify(request.name)}.json`;
-    await fs.writeFile(
-      path.join(requestsDir, fileName),
-      JSON.stringify(request, null, 2),
-    );
+    await fs.mkdir(requestsDir, { recursive: true, mode: PRIVATE_DIR_MODE });
+    await this.writeNewFile(requestsDir, this.slugify(request.name) || 'request', JSON.stringify(request, null, 2));
   }
 
   /**
@@ -204,23 +238,15 @@ export class CollectionManager {
    * @returns A promise that resolves when the folder and descendants are written.
    */
   private async saveFolder(folderPath: string, folder: NexusFolder): Promise<void> {
-    await fs.mkdir(folderPath, { recursive: true });
 
     const { items: _items, ...meta } = folder;
-    await fs.writeFile(
-      path.join(folderPath, 'folder.json'),
-      JSON.stringify({ ...meta, itemOrder: folder.items.map((i) => i.id) }, null, 2),
-    );
+    await writePrivateFile(path.join(folderPath, 'folder.json'), JSON.stringify({ ...meta, itemOrder: folder.items.map((i) => i.id) }, null, 2));
 
     for (const item of folder.items) {
       if (isFolder(item)) {
-        await this.saveFolder(path.join(folderPath, this.slugify(item.name)), item);
+        await this.saveFolder(await this.claimDirectory(folderPath, this.slugify(item.name) || 'folder'), item);
       } else {
-        const fileName = `${this.slugify(item.name)}.json`;
-        await fs.writeFile(
-          path.join(folderPath, fileName),
-          JSON.stringify(item, null, 2),
-        );
+        await this.writeNewFile(folderPath, this.slugify(item.name) || 'request', JSON.stringify(item, null, 2));
       }
     }
   }
@@ -252,7 +278,7 @@ export class CollectionManager {
         const filePath = path.join(requestsDir, file);
         const data = JSON.parse(await fs.readFile(filePath, 'utf-8')) as { id?: string };
         if (data.id === requestId) {
-          await fs.writeFile(filePath, JSON.stringify({ ...request, id: requestId }, null, 2));
+          await writePrivateFile(filePath, JSON.stringify({ ...request, id: requestId }, null, 2));
           return;
         }
       }

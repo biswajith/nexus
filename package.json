@@ -14,7 +14,7 @@
     "build:desktop": "npm run build --workspace=packages/desktop",
     "lint": "eslint packages/*/src --ext .ts,.tsx",
     "typecheck": "tsc --build",
-    "test": "npm run test --workspace=packages/core",
+    "test": "npm run test --workspace=packages/core && npm run test --workspace=packages/desktop",
     "clean": "rm -rf packages/*/dist packages/*/node_modules/.vite"
   },
   "engines": {
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "express-rate-limit": "^8.5.1",
-    "fast-uri": "^3.1.2",
-    "hono": "^4.12.18"
+    "fast-uri": "^3.1.7",
+    "hono": "^4.13.7"
   }
 }
