@@ -418,6 +418,131 @@ describe('ScriptSandbox', () => {
     });
   });
 
+  describe('execute – realm isolation', () => {
+    // Each probe tries to reach the host `Function` constructor and run code with it.
+    // Code generation is disabled inside the context, so an in-realm constructor throws;
+    // a host-realm one would return the host `process` object.
+    const probe = (expr: string) => `
+      let escaped = false;
+      try {
+        const F = (${expr});
+        const p = F('return process')();
+        escaped = typeof p === 'object' && p !== null && typeof p.pid === 'number';
+      } catch (e) { /* blocked */ }
+      console.log(escaped ? 'ESCAPED' : 'blocked');
+    `;
+
+    const paths: Record<string, string> = {
+      'nx scope function': 'nx.environment.get.constructor',
+      'nx.variables function': 'nx.variables.replaceIn.constructor',
+      'console method': 'console.log.constructor',
+      'expectation object': 'nx.expect(1).constructor.constructor',
+      'expectation type checker': 'nx.expect(1).to.be.a.constructor',
+      'request headers': 'nx.request.headers.constructor.constructor',
+      'response headers': 'nx.response.headers.constructor.constructor',
+      'response json': 'nx.response.json().constructor.constructor',
+      'environment snapshot': 'nx.environment.toObject().constructor.constructor',
+      'global this': 'this.constructor.constructor',
+      'script function': '(function(){}).constructor',
+    };
+
+    for (const [label, expr] of Object.entries(paths)) {
+      it(`blocks host Function via ${label}`, () => {
+        const ctx = makeContext({ response: makeResponse() });
+        const result = sandbox.execute(probe(expr), ctx);
+        expect(result.logs[0]?.args).toEqual(['blocked']);
+      });
+    }
+
+    it('blocks host Function via errors raised by host calls', () => {
+      const script = probe(`(() => {
+        try { nx.environment.set({ toString() { return 1n; } }, 'x'); } catch (e) { return e.constructor.constructor; }
+        try { nx.expect({}).to.matchSchema({ type: 'nope' }); } catch (e) { return e.constructor.constructor; }
+        return null;
+      })()`);
+      const result = sandbox.execute(script, makeContext());
+      expect(result.logs[0]?.args).toEqual(['blocked']);
+    });
+
+    it('blocks host Function via errors caught inside nx.test', () => {
+      const script = `
+        let ctor;
+        nx.test('t', () => { try { nx.expect(1).to.equal(2); } catch (e) { ctor = e.constructor.constructor; throw e; } });
+        ${probe('ctor')}
+      `;
+      const result = sandbox.execute(script, makeContext());
+      expect(result.logs.at(-1)?.args).toEqual(['blocked']);
+      expect(result.testResults[0]?.passed).toBe(false);
+    });
+
+    it('blocks host Function via stack overflow around host calls', () => {
+      const script = `
+        let ctor = null;
+        function dive() {
+          try { dive(); } catch (e) { if (!ctor) ctor = e.constructor.constructor; }
+          try { nx.environment.get('k'); } catch (e) { if (!ctor) ctor = e.constructor.constructor; }
+        }
+        dive();
+        ${probe('ctor')}
+      `;
+      const result = sandbox.execute(script, makeContext());
+      expect(result.logs.at(-1)?.args).toEqual(['blocked']);
+    });
+
+    it('walks every reachable nx/console function and finds no host constructor', () => {
+      const script = `
+        const seen = new Set();
+        const hits = [];
+        const walk = (v, path) => {
+          if (v === null || (typeof v !== 'object' && typeof v !== 'function') || seen.has(v)) return;
+          seen.add(v);
+          for (const target of [v, Object.getPrototypeOf(v)]) {
+            try {
+              const p = target.constructor.constructor('return process')();
+              if (p && typeof p.pid === 'number') hits.push(path);
+            } catch (e) { /* blocked */ }
+          }
+          for (const k of Object.getOwnPropertyNames(v)) {
+            let child;
+            try { child = v[k]; } catch (e) { continue; }
+            walk(child, path + '.' + k);
+          }
+        };
+        walk(nx, 'nx');
+        walk(console, 'console');
+        console.log(hits.length);
+      `;
+      const ctx = makeContext({
+        response: makeResponse(),
+        visualizer: { set: () => undefined },
+      });
+      const result = sandbox.execute(script, ctx);
+      expect(result.error).toBeUndefined();
+      expect(result.logs[0]?.args).toEqual([0]);
+    });
+
+    it('does not let thrown accessors run outside the timeout', () => {
+      const fast = new ScriptSandbox(50);
+      const script = 'throw { get message() { while (true) {} }, toString() { while (true) {} } };';
+      const result = fast.execute(script, makeContext());
+      expect(result.error).toBeDefined();
+    });
+
+    it('applies the timeout to promise callbacks', () => {
+      const fast = new ScriptSandbox(50);
+      const result = fast.execute('Promise.resolve().then(() => { while (true) {} });', makeContext());
+      expect(result.error).toContain('timed out');
+    });
+
+    it('reports in-place header edits as request mutations', () => {
+      const result = sandbox.execute('nx.request.headers["X-Trace"] = "1";', makeContext());
+      expect(result.requestMutations?.headers).toEqual({
+        'Content-Type': 'application/json',
+        'X-Trace': '1',
+      });
+    });
+  });
+
   describe('execute – timeout', () => {
     it('times out on infinite loops', () => {
       const fast = new ScriptSandbox(50);

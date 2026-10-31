@@ -9,6 +9,6 @@
     "types": ["node"]
   },
   "include": ["src/main/**/*.ts"],
-  "exclude": ["dist", "node_modules", "src/renderer"],
+  "exclude": ["dist", "node_modules", "src/renderer", "src/**/*.test.ts"],
   "references": [{ "path": "../core" }]
 }

@@ -1,4 +1,4 @@
-import { request as undiciRequest, interceptors, Agent, setGlobalDispatcher } from 'undici';
+import { request as undiciRequest, Agent } from 'undici';
 import type { HttpMethod, NexusResponse, ResponseTiming, RequestSettings } from '../types/index.js';
 
 export interface SendOptions {
@@ -10,19 +10,35 @@ export interface SendOptions {
   settings?: RequestSettings;
 }
 
-let redirectAgentInitialized = false;
+// Redirects are followed by hand (not with undici's redirect interceptor) so credentials can be
+// dropped when a redirect leaves the original origin. Undici strips only Authorization, Cookie and
+// Proxy-Authorization, but Nexus also sends credentials in arbitrary headers (API-key auth,
+// x-amz-security-token, user-defined headers).
+const dispatcher = new Agent();
+
+/** Request headers that carry no credentials and are kept on a cross-origin redirect. */
+const CROSS_ORIGIN_SAFE_HEADERS = new Set([
+  'accept',
+  'accept-encoding',
+  'accept-language',
+  'cache-control',
+  'content-language',
+  'content-type',
+  'pragma',
+  'user-agent',
+]);
 
 /**
- * Sets undici's global dispatcher to an agent that follows redirects up to `maxRedirects`.
- * @param maxRedirects - Maximum number of redirects to follow for subsequent requests.
- * @returns void
+ * Removes every header not on the cross-origin allowlist.
+ * @param headers - Headers sent to the previous origin.
+ * @returns Headers safe to send to a different origin.
  */
-function ensureRedirectAgent(maxRedirects: number): void {
-  const agent = new Agent().compose(
-    interceptors.redirect({ maxRedirections: maxRedirects }),
-  );
-  setGlobalDispatcher(agent);
-  redirectAgentInitialized = true;
+export function stripCrossOriginHeaders(headers: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (CROSS_ORIGIN_SAFE_HEADERS.has(key.toLowerCase())) kept[key] = value;
+  }
+  return kept;
 }
 
 /**
@@ -35,9 +51,6 @@ export async function sendHttpRequest(opts: SendOptions): Promise<NexusResponse>
   const timings: Partial<ResponseTiming> = {};
 
   const maxRedirects = opts.settings?.followRedirects === false ? 0 : (opts.settings?.maxRedirects ?? 10);
-  if (!redirectAgentInitialized || maxRedirects !== 10) {
-    ensureRedirectAgent(maxRedirects);
-  }
 
   const controller = new AbortController();
   const timeoutMs = opts.settings?.timeout ?? 30_000;
@@ -54,12 +67,33 @@ export async function sendHttpRequest(opts: SendOptions): Promise<NexusResponse>
 
     const ttfbStart = performance.now();
 
-    const response = await undiciRequest(opts.url, {
-      method: opts.method,
-      headers: opts.headers,
-      body: opts.body ?? undefined,
-      signal: controller.signal,
-    });
+    let url = opts.url;
+    let method: string = opts.method;
+    let reqHeaders = opts.headers;
+    let body = opts.body ?? undefined;
+    let response = await undiciRequest(url, { method: method as HttpMethod, headers: reqHeaders, body, signal: controller.signal, dispatcher });
+
+    for (let redirects = 0; redirects < maxRedirects; redirects++) {
+      const location = response.headers.location;
+      const target = Array.isArray(location) ? location[0] : location;
+      if (!target || ![301, 302, 303, 307, 308].includes(response.statusCode)) break;
+
+      await response.body.dump();
+      const next = new URL(target, url);
+      if (next.origin !== new URL(url).origin) {
+        reqHeaders = stripCrossOriginHeaders(reqHeaders);
+      }
+      // Same rules as fetch: 303 always becomes GET; 301/302 turn a POST into GET.
+      if (response.statusCode === 303 ? method !== 'HEAD' : (response.statusCode <= 302 && method === 'POST')) {
+        method = 'GET';
+        body = undefined;
+        reqHeaders = Object.fromEntries(
+          Object.entries(reqHeaders).filter(([k]) => !['content-type', 'content-length'].includes(k.toLowerCase())),
+        );
+      }
+      url = next.href;
+      response = await undiciRequest(url, { method: method as HttpMethod, headers: reqHeaders, body, signal: controller.signal, dispatcher });
+    }
 
     timings.ttfb = performance.now() - ttfbStart;
 

@@ -2,6 +2,7 @@ import type { IpcMain } from 'electron';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import {
   sendHttpRequest,
   CollectionManager,
@@ -21,6 +22,9 @@ import {
   generateCurl,
   DocGenerator,
   Visualizer,
+  ensurePrivateDir,
+  writePrivateFile,
+  isSafeFileId,
 } from '@nexus/core';
 import type {
   SendOptions, AuthConfig, Variable, ImportFormat,
@@ -71,12 +75,47 @@ interface SendRequestPayload {
 }
 
 /**
+ * Writes an environment to `~/.nexus/environments/<id>.json` with mode 0600.
+ * @param env - Environment to save; its id must be a safe file name.
+ * @param flag - `'wx'` to create (fails if the id exists), `'w'` to replace.
+ * @returns The saved environment.
+ */
+async function saveEnvironment(env: NexusEnvironment, flag: 'w' | 'wx'): Promise<NexusEnvironment> {
+  if (!isSafeFileId(env.id)) throw new Error('Invalid environment id');
+  const envDir = path.join(NEXUS_HOME, 'environments');
+  await ensurePrivateDir(envDir);
+  await writePrivateFile(path.join(envDir, `${env.id}.json`), JSON.stringify(env, null, 2), flag);
+  return env;
+}
+
+/**
+ * Saves an imported environment without touching existing ones. The id comes from the imported
+ * file, so it is replaced with a fresh one when it is not a safe file name or is already taken.
+ * @param env - Imported environment.
+ * @returns The saved environment (possibly with a new id).
+ */
+async function saveImportedEnvironment(env: NexusEnvironment): Promise<NexusEnvironment> {
+  let candidate = isSafeFileId(env.id) ? env : { ...env, id: `env_${randomUUID()}` };
+  for (;;) {
+    try {
+      return await saveEnvironment(candidate, 'wx');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      candidate = { ...env, id: `env_${randomUUID()}` };
+    }
+  }
+}
+
+/**
  * Registers all `ipcMain.handle` channels so the renderer can invoke `@nexus/core` services on the main process.
  *
  * @param ipcMain - The Electron main-process `ipcMain` instance to register handlers on.
  * @returns void
  */
 export function registerIpcHandlers(ipcMain: IpcMain): void {
+  // ~/.nexus holds tokens, secrets and history: owner-only, also for installs made by older versions.
+  void ensurePrivateDir(NEXUS_HOME);
+
   ipcMain.handle('http:send', async (_event, payload: SendRequestPayload) => {
     const envVars = payload.environmentVars ?? [];
     const collVars = payload.collectionVars ?? [];
@@ -269,13 +308,13 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
     const metaPath = path.join(collectionDir, 'collection.json');
     const data = JSON.parse(await fs.readFile(metaPath, 'utf-8'));
     data.name = newName;
-    await fs.writeFile(metaPath, JSON.stringify(data, null, 2), 'utf-8');
+    await writePrivateFile(metaPath, JSON.stringify(data, null, 2));
   });
 
   // Environment CRUD
   ipcMain.handle('environments:list', async () => {
     const envDir = path.join(NEXUS_HOME, 'environments');
-    await fs.mkdir(envDir, { recursive: true });
+    await ensurePrivateDir(envDir);
     try {
       const files = await fs.readdir(envDir);
       const environments: NexusEnvironment[] = [];
@@ -291,20 +330,16 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
   });
 
   ipcMain.handle('environments:create', async (_event, env: NexusEnvironment) => {
-    const envDir = path.join(NEXUS_HOME, 'environments');
-    await fs.mkdir(envDir, { recursive: true });
-    await fs.writeFile(path.join(envDir, `${env.id}.json`), JSON.stringify(env, null, 2), 'utf-8');
-    return env;
+    return saveEnvironment(env, 'w');
   });
 
   ipcMain.handle('environments:update', async (_event, env: NexusEnvironment) => {
-    const envDir = path.join(NEXUS_HOME, 'environments');
-    await fs.writeFile(path.join(envDir, `${env.id}.json`), JSON.stringify(env, null, 2), 'utf-8');
-    return env;
+    return saveEnvironment(env, 'w');
   });
 
   ipcMain.handle('environments:delete', async (_event, envId: string) => {
     const envDir = path.join(NEXUS_HOME, 'environments');
+    if (!isSafeFileId(envId)) throw new Error('Invalid environment id');
     const filePath = path.join(envDir, `${envId}.json`);
     await fs.rm(filePath, { force: true });
   });
@@ -382,10 +417,9 @@ export function registerIpcHandlers(ipcMain: IpcMain): void {
       results.push(`Collection "${collection.name}" imported`);
     }
 
-    const envDir = path.join(NEXUS_HOME, 'environments');
-    await fs.mkdir(envDir, { recursive: true });
     for (const env of environments) {
-      await fs.writeFile(path.join(envDir, `${env.id}.json`), JSON.stringify(env, null, 2), 'utf-8');
+      // An imported environment never replaces an existing one: on an unsafe or taken id it gets a new id.
+      await saveImportedEnvironment(env);
       results.push(`Environment "${env.name}" imported`);
     }
 

@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "electron:dev": "npm run build:electron && electron .",
-    "start": "electron ."
+    "start": "electron .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -38,6 +39,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.4.0",
+    "archunit": "^2.5.4",
     "electron": "^41.10.6",
     "lightningcss": "^1.29.0",
     "typescript": "^5.7.0",

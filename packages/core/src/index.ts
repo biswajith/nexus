@@ -1,4 +1,5 @@
 export * from './types/index.js';
+export * from './fs/private-fs.js';
 export * from './http/request-sender.js';
 export * from './environments/variable-store.js';
 export * from './collections/collection-manager.js';

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { appendPrivateFile, ensurePrivateDir } from '../fs/private-fs.js';
 import type { HistoryEntry, HistoryFilter } from '../types/index.js';
 
 /**
@@ -16,7 +17,7 @@ export class HistoryManager {
    * @returns A Promise that resolves when the directory is ready.
    */
   private async ensureDirectory(): Promise<void> {
-    await fs.mkdir(this.basePath, { recursive: true });
+    await ensurePrivateDir(this.basePath);
   }
 
   /**
@@ -28,7 +29,7 @@ export class HistoryManager {
     await this.ensureDirectory();
     const date = new Date(entry.timestamp).toISOString().slice(0, 10);
     const filePath = path.join(this.basePath, `${date}.jsonl`);
-    await fs.appendFile(filePath, JSON.stringify(entry) + '\n');
+    await appendPrivateFile(filePath, JSON.stringify(entry) + '\n');
   }
 
   /**
