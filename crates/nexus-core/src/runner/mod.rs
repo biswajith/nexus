@@ -51,6 +51,10 @@ pub struct RunConfig {
     /// Accepted for compatibility with the UI; the TS runner never used it either.
     #[serde(default)]
     pub persist_variables: bool,
+    /// Untrusted (imported / pulled) collection: its scripts are skipped and Secret
+    /// environment/global variables are withheld.
+    #[serde(default)]
+    pub untrusted: bool,
 }
 
 /// Progress events, serialized as `{ "type": "...", "data": ... }` like the TS `RunEvent`.
@@ -236,11 +240,38 @@ impl CollectionRunner {
             Some(rows) if !rows.is_empty() => rows.clone(),
             _ => vec![IndexMap::new()],
         };
-        let collection = Arc::new(config.collection.clone());
+        let (collection, environment, global) = if config.untrusted {
+            let mut stripped = crate::trust::strip_scripts(&config.collection);
+            // An untrusted collection cannot switch off certificate checks.
+            crate::trust::strip_insecure_tls(&mut stripped);
+            (
+                stripped,
+                crate::trust::without_secrets(&config.environment_vars),
+                crate::trust::without_secrets(&config.global_vars),
+            )
+        } else {
+            (
+                config.collection.clone(),
+                config.environment_vars.clone(),
+                config.global_vars.clone(),
+            )
+        };
+        let withheld = if config.untrusted {
+            crate::trust::secret_count(&config.environment_vars)
+                + crate::trust::secret_count(&config.global_vars)
+        } else {
+            0
+        };
+        let untrusted_note = config.untrusted.then(|| {
+            crate::trust::warning(format!(
+                "Untrusted collection: scripts skipped, {withheld} secret variable(s) withheld. Trust the collection to enable them."
+            ))
+        });
+        let collection = Arc::new(collection);
         let mut state = RunState {
-            environment: config.environment_vars.clone(),
+            environment,
             collection: collection.variables.clone(),
-            global: config.global_vars.clone(),
+            global,
         };
         let queue: Vec<NexusRequest> = build_queue(&collection, &config.request_ids);
 
@@ -281,7 +312,7 @@ impl CollectionRunner {
                     result,
                     next_request,
                 } = self
-                    .execute_request(req, &collection, &mut state, &data_vars)
+                    .execute_request(req, &collection, &mut state, &data_vars, &untrusted_note)
                     .await;
                 all_results.push(result.clone());
                 sink(RunEvent::RequestComplete(result.clone()));
@@ -350,8 +381,9 @@ impl CollectionRunner {
         collection: &Arc<NexusCollection>,
         state: &mut RunState,
         data_vars: &[Variable],
+        untrusted_note: &Option<LogEntry>,
     ) -> Executed {
-        let mut logs: Vec<LogEntry> = Vec::new();
+        let mut logs: Vec<LogEntry> = untrusted_note.iter().cloned().collect();
         let mut next_request = None;
         match self
             .try_execute(
@@ -408,6 +440,7 @@ impl CollectionRunner {
                 .collect(),
         });
         let resolved = resolve_request(req, &store);
+        let configured_url = resolved.url.clone();
 
         let failure = |method: &str,
                        url: &str,
@@ -481,13 +514,23 @@ impl CollectionRunner {
             .collect();
         let auth = effective_auth(&req.auth, &ancestors);
 
+        // Auth stays bound to the origin the request was configured with.
+        let (auth, origin_warning) =
+            crate::trust::bind_auth_to_origin(Some(&auth), &configured_url, &url);
+        logs.extend(origin_warning);
+        let settings = req.settings.clone();
+        if settings.reject_unauthorized == Some(false) {
+            logs.push(crate::trust::warning(
+                "TLS certificate verification is DISABLED for this request.",
+            ));
+        }
         let sent = send_authenticated(
-            Some(&auth),
+            auth,
             parse_method(&method)?,
             url.clone(),
             pre.request.headers.clone(),
             pre.request.body.clone(),
-            req.settings.clone(),
+            settings,
         )
         .await?;
         let response = sent.response;

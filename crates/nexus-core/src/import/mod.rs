@@ -65,11 +65,20 @@ pub fn import_data(data: &str, format: Option<ImportFormat>) -> Result<ImportRes
             })
         }
         ImportFormat::Nexus => {
-            let collection: NexusCollection = serde_json::from_str(data)?;
+            let mut collection: NexusCollection = serde_json::from_str(data)?;
+            // A shared file must not switch off certificate checks on its own.
+            let tls = crate::trust::strip_insecure_tls(&mut collection);
+            let warnings = if tls > 0 {
+                vec![format!(
+                    "{tls} request(s) had TLS certificate verification disabled; it was re-enabled."
+                )]
+            } else {
+                vec![]
+            };
             Ok(ImportResult {
                 collections: vec![collection],
                 environments: vec![],
-                warnings: vec![],
+                warnings,
             })
         }
     }

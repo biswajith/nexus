@@ -84,6 +84,15 @@ impl App {
     pub fn collection_create(&self, c: &NexusCollection) -> crate::Result<String> {
         self.collections.create_collection(c)
     }
+    pub fn collection_is_trusted(&self, dir_name: &str) -> bool {
+        self.collections.is_trusted(dir_name)
+    }
+    pub fn collection_trust_status(&self, dir_name: &str) -> crate::collections::TrustStatus {
+        self.collections.trust_status(dir_name)
+    }
+    pub fn collection_trust(&self, dir_name: &str) -> crate::Result<()> {
+        self.collections.trust_collection(dir_name)
+    }
     pub fn collection_delete(&self, dir_name: &str) -> crate::Result<()> {
         self.collections.delete_collection(dir_name)
     }
@@ -160,7 +169,7 @@ impl App {
             exporter::export_environment_as_nexus_json(e)
         }
     }
-    /// Persists imported collections (each into a fresh directory) and environments (never
+    /// Persists imported collections (each into a fresh directory, untrusted) and environments (never
     /// replacing an existing one). Returns one status line per item.
     pub fn import_save(
         &self,
@@ -169,7 +178,7 @@ impl App {
     ) -> crate::Result<Vec<String>> {
         let mut results = Vec::new();
         for c in collections {
-            self.collections.create_collection(c)?;
+            self.collections.create_imported_collection(c)?;
             results.push(format!("Collection \"{}\" imported", c.name));
         }
         for e in environments {

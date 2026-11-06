@@ -373,20 +373,48 @@ fn header_text(v: &HeaderValue) -> String {
     }
 }
 
-/// Decodes an image into pixels, unless it is too large to be worth a texture.
-fn decode_image(bytes: &[u8]) -> Option<ColorImage> {
-    let img = image::load_from_memory(bytes).ok()?;
-    let (w, h) = (img.width() as usize, img.height() as usize);
-    if w == 0 || h == 0 || w > 8192 || h > 8192 || w * h > 16_000_000 {
+/// Decodes an image into pixels, unless it is too large to be worth a texture. Dimensions are read
+/// from the header first and the decoder gets matching limits, so a small file claiming huge
+/// dimensions (an image bomb) is refused before any pixel buffer is allocated.
+pub(crate) fn decode_image(bytes: &[u8]) -> Option<ColorImage> {
+    use image::{ImageReader, Limits};
+    let reader = || {
+        ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()
+            .ok()
+    };
+    let (w, h) = reader()?.into_dimensions().ok()?;
+    if w == 0 || h == 0 || w > 8192 || h > 8192 || u64::from(w) * u64::from(h) > 16_000_000 {
         return None;
     }
-    let rgba = img.to_rgba8();
-    Some(ColorImage::from_rgba_unmultiplied([w, h], rgba.as_raw()))
+    let mut r = reader()?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(8192);
+    limits.max_image_height = Some(8192);
+    limits.max_alloc = Some(128 * 1024 * 1024);
+    r.limits(limits);
+    let rgba = r.decode().ok()?.to_rgba8();
+    Some(ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        rgba.as_raw(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decode_image_refuses_header_claiming_huge_dimensions() {
+        // PNG signature + IHDR claiming 60000x60000 (no pixel data follows).
+        let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13];
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&60000u32.to_be_bytes());
+        png.extend_from_slice(&60000u32.to_be_bytes());
+        png.extend_from_slice(&[8, 0, 0, 0, 0]);
+        png.extend_from_slice(&[0, 0, 0, 0]); // bogus CRC
+        assert!(decode_image(&png).is_none());
+    }
 
     #[test]
     fn text_doc_indexes_lines_and_finds_matches() {

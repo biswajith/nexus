@@ -12,6 +12,7 @@ use crate::types::{CollectionItem, NexusCollection, NexusFolder, NexusRequest};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -24,6 +25,16 @@ pub struct CollectionMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub path: String,
+}
+
+/// Whether a collection may run scripts and see secrets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrustStatus {
+    Trusted,
+    /// Never trusted (imported, pulled, copied in).
+    Untrusted,
+    /// Trusted before, but its scripts or requests changed outside the app since.
+    Changed,
 }
 
 /// Reads and writes Nexus collection folders under a base path.
@@ -327,9 +338,121 @@ impl CollectionManager {
         Ok(meta)
     }
 
-    /// Writes a new collection directory (slug from name, never reusing an existing one).
-    /// Returns the directory name it was written to.
+    /// Where trust decisions live: next to (not inside) the collections root, so a shared or
+    /// git-synced collections folder cannot carry its own trust.
+    fn trust_file(&self) -> PathBuf {
+        self.base_path.with_file_name("trusted-collections.json")
+    }
+
+    /// Trusted collections: directory name -> hash of their trust-relevant content. Migration:
+    /// when the file does not exist yet, every collection already on disk is grandfathered in as
+    /// trusted (it is the user's own work) with its current hash recorded; anything that shows
+    /// up afterwards (import, git pull, copied in) starts untrusted.
+    fn trusted_map(&self) -> Result<BTreeMap<String, String>> {
+        let file = self.trust_file();
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            return Ok(serde_json::from_str(&text).unwrap_or_default());
+        }
+        self.ensure_directory()?;
+        let map: BTreeMap<String, String> = subdirs(&self.base_path)
+            .iter()
+            .filter(|d| d.join("collection.json").is_file())
+            .filter_map(|d| d.file_name().map(|n| n.to_string_lossy().to_string()))
+            .map(|n| {
+                let h = self.content_hash(&n).unwrap_or_default();
+                (n, h)
+            })
+            .collect();
+        self.write_trusted(&map)?;
+        Ok(map)
+    }
+
+    fn write_trusted(&self, map: &BTreeMap<String, String>) -> Result<()> {
+        write_private_file(
+            &self.trust_file(),
+            &serde_json::to_string_pretty(map)?,
+            WriteMode::Replace,
+        )?;
+        Ok(())
+    }
+
+    /// SHA-256 of everything the collection can execute or send: the whole loaded collection
+    /// (all scripts at collection, folder and request level, plus auth, URLs, headers, bodies
+    /// and variables). Only editing it outside the app changes this without a refresh.
+    fn content_hash(&self, dir_name: &str) -> Result<String> {
+        use sha2::{Digest, Sha256};
+        let c = self.load_collection(dir_name)?;
+        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&c)?)))
+    }
+
+    /// Trust state of the collection in `dir_name`, checked against the files on disk now.
+    pub fn trust_status(&self, dir_name: &str) -> TrustStatus {
+        if check_dir_name(dir_name).is_err() {
+            return TrustStatus::Untrusted;
+        }
+        let Ok(mut map) = self.trusted_map() else {
+            return TrustStatus::Untrusted;
+        };
+        let Some(stored) = map.get(dir_name).cloned() else {
+            return TrustStatus::Untrusted;
+        };
+        let Ok(now) = self.content_hash(dir_name) else {
+            return TrustStatus::Changed;
+        };
+        if stored.is_empty() {
+            map.insert(dir_name.to_string(), now);
+            let _ = self.write_trusted(&map);
+            return TrustStatus::Trusted;
+        }
+        if stored == now {
+            TrustStatus::Trusted
+        } else {
+            TrustStatus::Changed
+        }
+    }
+
+    /// Whether the user trusts the collection in `dir_name` (scripts and secrets allowed).
+    pub fn is_trusted(&self, dir_name: &str) -> bool {
+        self.trust_status(dir_name) == TrustStatus::Trusted
+    }
+
+    /// Marks the collection in `dir_name` as trusted as it is now (persisted, with its hash).
+    pub fn trust_collection(&self, dir_name: &str) -> Result<()> {
+        check_dir_name(dir_name)?;
+        let mut map = self.trusted_map()?;
+        map.insert(dir_name.to_string(), self.content_hash(dir_name)?);
+        self.write_trusted(&map)
+    }
+
+    /// Runs an in-app edit; if the collection was trusted before it, the stored hash is
+    /// refreshed so the user's own edits do not untrust it. An untrusted or externally changed
+    /// collection stays so (saving into it must not launder foreign content into trust).
+    fn edit<T>(&self, dir_name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        let was_trusted = self.is_trusted(dir_name);
+        let r = f()?;
+        if was_trusted {
+            self.trust_collection(dir_name)?;
+        }
+        Ok(r)
+    }
+
+    /// Like [`Self::create_collection`] for content that did not originate here (imports): the
+    /// collection starts untrusted.
+    pub fn create_imported_collection(&self, collection: &NexusCollection) -> Result<String> {
+        self.trusted_map()?; // migrate existing collections before a new directory appears
+        self.write_collection(collection)
+    }
+
+    /// Writes a new collection directory (slug from name, never reusing an existing one) and
+    /// trusts it: the user created it. Returns the directory name it was written to.
     pub fn create_collection(&self, collection: &NexusCollection) -> Result<String> {
+        self.trusted_map()?;
+        let dir_name = self.write_collection(collection)?;
+        self.trust_collection(&dir_name)?;
+        Ok(dir_name)
+    }
+
+    fn write_collection(&self, collection: &NexusCollection) -> Result<String> {
         self.ensure_directory()?;
         let dir = claim_directory(&self.base_path, &slug_or(&collection.name, "collection"))?;
         create_private_dir(&dir.join("requests"))?;
@@ -363,8 +486,10 @@ impl CollectionManager {
     }
 
     pub fn add_request(&self, dir_name: &str, request: &NexusRequest) -> Result<()> {
-        let dir = self.collection_dir(dir_name)?;
-        self.save_request(&dir, request)
+        self.edit(dir_name, || {
+            let dir = self.collection_dir(dir_name)?;
+            self.save_request(&dir, request)
+        })
     }
 
     /// Finds the request file whose stored `id` matches: in `requests/`, then in the folders
@@ -403,49 +528,61 @@ impl CollectionManager {
     ) -> Result<()> {
         let mut request = request.clone();
         request.id = request_id.to_string();
-        match self.find_request_file(dir_name, request_id)? {
-            Some(file) => {
-                write_private_file(
-                    &file,
-                    &serde_json::to_string_pretty(&request)?,
-                    WriteMode::Replace,
-                )?;
-                Ok(())
+        self.edit(dir_name, || {
+            match self.find_request_file(dir_name, request_id)? {
+                Some(file) => {
+                    write_private_file(
+                        &file,
+                        &serde_json::to_string_pretty(&request)?,
+                        WriteMode::Replace,
+                    )?;
+                    Ok(())
+                }
+                None => self.add_request(dir_name, &request),
             }
-            None => self.add_request(dir_name, &request),
-        }
+        })
     }
 
     /// Removes the request file whose `id` matches; a no-op if there is none.
     pub fn delete_request(&self, dir_name: &str, request_id: &str) -> Result<()> {
-        if let Some(file) = self.find_request_file(dir_name, request_id)? {
-            std::fs::remove_file(file)?;
-        }
-        Ok(())
+        self.edit(dir_name, || {
+            if let Some(file) = self.find_request_file(dir_name, request_id)? {
+                std::fs::remove_file(file)?;
+            }
+            Ok(())
+        })
     }
 
     /// Deletes the whole collection directory; a missing directory is not an error.
     pub fn delete_collection(&self, dir_name: &str) -> Result<()> {
         let dir = self.collection_dir(dir_name)?;
         match std::fs::remove_dir_all(dir) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e.into()),
-            _ => Ok(()),
+            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+            _ => {}
         }
+        // A new directory later reusing the name must not inherit the trust.
+        let mut map = self.trusted_map()?;
+        if map.remove(dir_name).is_some() {
+            self.write_trusted(&map)?;
+        }
+        Ok(())
     }
 
     /// Sets the `name` in `collection.json` (the directory keeps its name).
     pub fn rename_collection(&self, dir_name: &str, new_name: &str) -> Result<()> {
-        let meta_path = self.collection_dir(dir_name)?.join("collection.json");
-        let mut data = read_json(&meta_path)?;
-        if let Some(obj) = data.as_object_mut() {
-            obj.insert("name".into(), Value::String(new_name.to_string()));
-        }
-        write_private_file(
-            &meta_path,
-            &serde_json::to_string_pretty(&data)?,
-            WriteMode::Replace,
-        )?;
-        Ok(())
+        self.edit(dir_name, || {
+            let meta_path = self.collection_dir(dir_name)?.join("collection.json");
+            let mut data = read_json(&meta_path)?;
+            if let Some(obj) = data.as_object_mut() {
+                obj.insert("name".into(), Value::String(new_name.to_string()));
+            }
+            write_private_file(
+                &meta_path,
+                &serde_json::to_string_pretty(&data)?,
+                WriteMode::Replace,
+            )?;
+            Ok(())
+        })
     }
 }
 

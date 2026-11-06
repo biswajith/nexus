@@ -370,13 +370,27 @@ impl NexusApp {
     /// Variable scopes for a tab: active environment, the collection it belongs to, globals.
     pub fn scopes_for(&self, tab: &crate::state::RequestTab) -> Scopes {
         Scopes {
-            environment: self.envs.variables(self.ui.active_env_id.as_deref()),
+            environment: {
+                let vars = self.envs.variables(self.ui.active_env_id.as_deref());
+                if self.tab_untrusted(tab) {
+                    nexus_core::trust::without_secrets(&vars)
+                } else {
+                    vars
+                }
+            },
             collection: self
                 .collection_of(tab)
                 .map(|c| c.variables.clone())
                 .unwrap_or_default(),
             global: Vec::new(),
         }
+    }
+
+    /// Whether the tab belongs to a collection the user has not trusted.
+    pub fn tab_untrusted(&self, tab: &crate::state::RequestTab) -> bool {
+        tab.origin
+            .as_ref()
+            .is_some_and(|o| self.collections.is_untrusted(&o.dir_name))
     }
 
     /// The loaded collection a tab was opened from or saved to.
@@ -390,13 +404,26 @@ impl NexusApp {
     }
 
     pub fn send_active(&mut self) {
+        if let Some(dir) = self
+            .tabs
+            .active()
+            .and_then(|t| t.origin.as_ref().map(|o| o.dir_name.clone()))
+        {
+            self.collections.recheck_trust(&self.app, &dir);
+        }
         let Some(t) = self.tabs.active() else { return };
         if t.loading {
             return;
         }
         let scopes = self.scopes_for(t);
         let collection = self.collection_of(t).cloned();
+        let untrusted = self.tab_untrusted(t);
         let request = t.request.clone();
+        let file_check = if untrusted {
+            nexus_core::trust::check_body_files(&request, &t.picked_files)
+        } else {
+            Ok(())
+        };
         let request_id = t
             .origin
             .as_ref()
@@ -413,13 +440,17 @@ impl NexusApp {
         let handle = self.rt.spawn(async move {
             // File reads (multipart / binary bodies) happen off the UI thread.
             let built = tokio::task::spawn_blocking(move || {
+                file_check?;
                 build_payload(&request, &request_id, &scopes, collection.as_ref())
             })
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r);
             let payload = match built {
-                Ok(p) => p,
+                Ok(mut p) => {
+                    p.untrusted = untrusted;
+                    p
+                }
                 Err(e) => {
                     return Msg::Http {
                         tab_id,
@@ -498,6 +529,7 @@ impl NexusApp {
             return;
         };
         let p = path.to_string_lossy().into_owned();
+        t.picked_files.insert(p.clone());
         let body = &mut t.request.body;
         match target {
             PickTarget::FormRow(i) => {

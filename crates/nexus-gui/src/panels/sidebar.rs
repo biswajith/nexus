@@ -163,6 +163,17 @@ impl NexusApp {
                             font(13.0, "Regular"),
                             fg(),
                         );
+                        if self.collections.is_untrusted(&dir) {
+                            let x =
+                                row.left() + 34.0 + text_w(ui, &meta.name, font(13.0, "Regular"));
+                            ui.painter().text(
+                                pos2(x + 8.0, row.center().y),
+                                Align2::LEFT_CENTER,
+                                "untrusted",
+                                font(11.0, "Medium"),
+                                warning(),
+                            );
+                        }
                         // "more actions" button
                         let mr = Rect::from_center_size(
                             pos2(row.right() - 20.0, row.center().y),

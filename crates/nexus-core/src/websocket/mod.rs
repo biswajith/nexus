@@ -23,6 +23,37 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_tungstenite::{connect_async, connect_async_tls_with_config, Connector};
 
 const MAX_MESSAGES: usize = 1000;
+/// The kept log holds at most this many bytes of message data (oldest evicted first).
+pub const MAX_LOG_BYTES: usize = 16 * 1024 * 1024;
+/// Message data kept per message for display; `size` still reports the real length.
+pub const MAX_DISPLAY_BYTES: usize = 256 * 1024;
+
+/// Cuts `s` to at most `max` bytes on a char boundary and marks the cut.
+pub fn truncate_display(mut s: String, max: usize) -> String {
+    if s.len() > max {
+        let mut cut = max;
+        while !s.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        s.truncate(cut);
+        s.push_str("\n[message truncated]");
+    }
+    s
+}
+
+/// Drops the oldest messages until both the count and byte caps hold (the newest always stays).
+pub fn evict_messages(messages: &mut Vec<WsMessage>, max_count: usize, max_bytes: usize) {
+    let mut total: usize = messages.iter().map(|m| m.data.len()).sum();
+    let mut drop = messages.len().saturating_sub(max_count);
+    for m in &messages[..drop] {
+        total -= m.data.len();
+    }
+    while total > max_bytes && drop + 1 < messages.len() {
+        total -= messages[drop].data.len();
+        drop += 1;
+    }
+    messages.drain(..drop);
+}
 const DEFAULT_RECONNECT_DELAY_MS: u64 = 3000;
 const DEFAULT_MAX_RECONNECT_ATTEMPTS: u32 = 5;
 /// How long to wait for the peer's close frame after we sent ours (same as `ws`).
@@ -139,10 +170,7 @@ impl Shared {
     fn add_message(&self, msg: WsMessage) {
         let mut st = self.lock();
         st.messages.push(msg);
-        if st.messages.len() > MAX_MESSAGES {
-            let excess = st.messages.len() - MAX_MESSAGES;
-            st.messages.drain(..excess);
-        }
+        evict_messages(&mut st.messages, MAX_MESSAGES, MAX_LOG_BYTES);
     }
 }
 
@@ -483,8 +511,8 @@ async fn connect_and_serve(
             },
             _ = &mut deadline, if closing => return Closed::abnormal(),
             frame = ws.next() => match frame {
-                Some(Ok(Message::Text(text))) => received(shared, text.as_str().to_string(), text.len(), WsMessageType::Text),
-                Some(Ok(Message::Binary(bytes))) => received(shared, hex::encode(&bytes), bytes.len(), WsMessageType::Binary),
+                Some(Ok(Message::Text(text))) => received(shared, truncate_display(text.as_str().to_string(), MAX_DISPLAY_BYTES), text.len(), WsMessageType::Text),
+                Some(Ok(Message::Binary(bytes))) => received(shared, truncate_display(hex::encode(&bytes[..bytes.len().min(MAX_DISPLAY_BYTES / 2)]), MAX_DISPLAY_BYTES), bytes.len(), WsMessageType::Binary),
                 Some(Ok(Message::Close(frame))) => {
                     // Let tungstenite flush its close reply before the socket is dropped.
                     let _ = tokio::time::timeout(Duration::from_secs(1), ws.close(None)).await;

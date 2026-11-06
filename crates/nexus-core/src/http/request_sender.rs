@@ -6,6 +6,33 @@ use reqwest::{Method, StatusCode};
 use std::time::{Duration, Instant};
 use url::Url;
 
+/// Largest response body kept in memory; the rest is dropped and the response marked truncated.
+const MAX_RESPONSE_BYTES: usize = 100 * 1024 * 1024;
+
+/// Appends `chunk` to `buf` without exceeding `cap` bytes; returns false when it had to cut.
+fn append_capped(buf: &mut Vec<u8>, chunk: &[u8], cap: usize) -> bool {
+    let room = cap.saturating_sub(buf.len());
+    if chunk.len() > room {
+        buf.extend_from_slice(&chunk[..room]);
+        return false;
+    }
+    buf.extend_from_slice(chunk);
+    true
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::append_capped;
+
+    #[test]
+    fn append_capped_stops_at_the_limit() {
+        let mut b = Vec::new();
+        assert!(append_capped(&mut b, b"abc", 5));
+        assert!(!append_capped(&mut b, b"defg", 5));
+        assert_eq!(b, b"abcde");
+    }
+}
+
 /// Request body as the sender sees it: the UI already turned every body mode into text, and the
 /// runner may hand over raw bytes.
 #[derive(Debug, Clone, PartialEq)]
@@ -168,16 +195,37 @@ async fn send_inner(opts: SendOptions) -> Result<NexusResponse> {
     }
 
     let download_start = Instant::now();
-    let body_bytes = response
-        .bytes()
+    let mut body_bytes: Vec<u8> = Vec::new();
+    let mut truncated = false;
+    while let Some(chunk) = response
+        .chunk()
         .await
         .map_err(|e| Error::Other(e.to_string()))?
-        .to_vec();
+    {
+        if !append_capped(&mut body_bytes, &chunk, MAX_RESPONSE_BYTES) {
+            truncated = true;
+            break;
+        }
+    }
     let download = download_start.elapsed().as_secs_f64() * 1000.0;
     let total = start.elapsed().as_secs_f64() * 1000.0;
 
-    let body_text = String::from_utf8_lossy(&body_bytes).into_owned();
-    let body_json = serde_json::from_str(&body_text).ok();
+    let mut body_text = String::from_utf8_lossy(&body_bytes).into_owned();
+    let body_json = if truncated {
+        None
+    } else {
+        serde_json::from_str(&body_text).ok()
+    };
+    if truncated {
+        body_text.push_str(&format!(
+            "\n[response truncated at {} MB]",
+            MAX_RESPONSE_BYTES / (1024 * 1024)
+        ));
+        out_headers.insert(
+            "x-nexus-truncated".to_string(),
+            HeaderValue::One("true".to_string()),
+        );
+    }
 
     Ok(NexusResponse {
         status: status.as_u16(),

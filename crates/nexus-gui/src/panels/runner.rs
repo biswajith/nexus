@@ -48,6 +48,7 @@ impl NexusApp {
         if !self.collections.loaded.contains_key(&dir) {
             self.collections.load(&self.app, &dir);
         }
+        self.collections.recheck_trust(&self.app, &dir);
         let Some(collection) = self.collections.loaded.get(&dir).cloned() else {
             self.runner.status = RunStatus::Error;
             self.runner.error = Some("Could not load the collection".into());
@@ -76,6 +77,7 @@ impl NexusApp {
             data_rows: self.runner.data.as_ref().map(|d| d.rows.clone()),
             stop_on_error: self.runner.stop_on_error,
             persist_variables: false,
+            untrusted: self.collections.is_untrusted(&dir),
             collection,
         };
         let r = &mut self.runner;
@@ -215,6 +217,9 @@ impl NexusApp {
         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
         let mut action: Option<Action> = None;
         self.runner_config(ui, &mut action);
+        if let Some(dir) = self.runner.collection.clone() {
+            self.untrusted_banner(ui, &dir);
+        }
         self.runner_progress(ui);
         self.runner_results(ui);
         match action {

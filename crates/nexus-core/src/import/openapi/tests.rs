@@ -501,3 +501,63 @@ fn path_param_conversion() {
     assert_eq!(convert_path_params("/a/{}/c"), "/a/{}/c");
     assert_eq!(convert_path_params("/a/{open"), "/a/{open");
 }
+
+#[test]
+fn yaml_alias_fanout_is_rejected_quickly() {
+    // One 500-item anchor referenced 4000 times: ~2M nodes from ~30 KB of text, which passes
+    // serde_yaml's own repetition check.
+    let items = vec!["x"; 500].join(", ");
+    let mut y =
+        format!("openapi: 3.0.0\ninfo: {{title: T, version: '1'}}\nbase: &a [{items}]\nrefs:\n");
+    for _ in 0..4000 {
+        y.push_str("  - *a\n");
+    }
+    let start = std::time::Instant::now();
+    let err = import(&y).unwrap_err().to_string();
+    assert!(err.contains("too many nodes"), "{err}");
+    assert!(start.elapsed().as_secs() < 5);
+}
+
+#[test]
+fn yaml_with_aliases_still_imports() {
+    let y = "openapi: 3.0.0\ninfo: {title: T, version: '1'}\nx: &a [1, 2]\ny: *a\npaths: {}\n";
+    assert_eq!(import(y).unwrap().collections[0].name, "T");
+}
+
+#[test]
+fn repeated_operation_tags_do_not_duplicate_requests() {
+    let spec = spec3(json!({"paths": {"/a": {"get": {"tags": ["t","t","t"]}}}}));
+    let r = import(&spec).unwrap();
+    let CollectionItem::Folder(f) = &r.collections[0].items[0] else {
+        panic!("expected folder")
+    };
+    assert_eq!(f.items.len(), 1);
+}
+
+#[test]
+fn operation_tags_keep_order_and_are_capped() {
+    let many: Vec<String> = (0..100).map(|i| format!("t{i}")).collect();
+    let spec = spec3(json!({"paths": {
+        "/a": {"get": {"tags": ["users", "admin", "users"]}},
+        "/b": {"get": {"tags": many}},
+    }}));
+    let r = import(&spec).unwrap();
+    let names: Vec<&str> = r.collections[0]
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            CollectionItem::Folder(f) => Some(f.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(&names[..2], ["users", "admin"]);
+    assert_eq!(names.len(), 2 + 32);
+}
+
+#[test]
+fn large_but_plain_yaml_still_imports_under_the_node_cap() {
+    let items = vec!["1"; 1_000_000].join(", ");
+    let y =
+        format!("openapi: 3.0.0\ninfo: {{title: Big, version: '1'}}\nx: [{items}]\npaths: {{}}\n");
+    assert_eq!(import(&y).unwrap().collections[0].name, "Big");
+}

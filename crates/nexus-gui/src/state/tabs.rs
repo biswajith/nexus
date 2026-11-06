@@ -23,6 +23,8 @@ pub struct RequestTab {
     pub loading: bool,
     /// Aborts the in-flight send.
     pub abort: Option<tokio::task::AbortHandle>,
+    /// Body file paths the user picked in this app (the only ones an untrusted request may read).
+    pub picked_files: std::collections::HashSet<String>,
 }
 
 impl RequestTab {
@@ -41,6 +43,7 @@ impl RequestTab {
             response: None,
             loading: false,
             abort: None,
+            picked_files: Default::default(),
         }
     }
 

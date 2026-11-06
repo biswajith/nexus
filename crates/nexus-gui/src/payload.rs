@@ -356,6 +356,8 @@ pub fn build_payload(
         environment_vars: scopes.environment.clone(),
         collection_vars: scopes.collection.clone(),
         global_vars: scopes.global.clone(),
+        // Set by the caller, which knows whether the collection is trusted.
+        untrusted: false,
     })
 }
 

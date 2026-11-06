@@ -231,3 +231,27 @@ fn static_text_is_unchanged() {
         "<h1>Static Content</h1>"
     );
 }
+
+#[test]
+fn substituted_data_is_never_rescanned_as_template() {
+    let data = json!({
+        "payload": "<script>alert(1)</script>",
+        "name": "{{{payload}}}",
+        "items": [{ "name": "{{{payload}}}{{#if payload}}X{{/if}}" }],
+        "flag": true
+    });
+    for tmpl in [
+        "{{name}}",
+        "{{#each items}}{{name}}{{/each}}",
+        "{{#if flag}}{{name}}{{/if}}",
+        "{{#unless nope}}{{name}}{{/unless}}",
+    ] {
+        let out = render(tmpl, data.clone());
+        assert!(!out.contains("<script>"), "{tmpl} -> {out}");
+        assert!(out.contains("{{{payload}}}"), "{tmpl} -> {out}");
+    }
+    assert_eq!(
+        render("{{payload}}", data),
+        "&lt;script&gt;alert(1)&lt;/script&gt;"
+    );
+}

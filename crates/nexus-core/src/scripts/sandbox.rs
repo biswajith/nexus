@@ -32,6 +32,17 @@ use crate::visualizer::Visualizer;
 pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 const MEMORY_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 const STACK_LIMIT_BYTES: usize = 512 * 1024;
+/// Largest single host-call payload; keeps native encode/copy work between interrupt checks small.
+const MAX_HOST_ARG_BYTES: usize = 4 * 1024 * 1024;
+/// Caps on host-side `console.*` output (entries and total encoded bytes).
+const MAX_LOG_ENTRIES: usize = 1000;
+const MAX_LOG_BYTES: usize = 4 * 1024 * 1024;
+/// Caps on variable sets per scope per run (count of changes, key + value bytes).
+const MAX_SET_OPS: usize = 1000;
+const MAX_SET_BYTES: usize = 4 * 1024 * 1024;
+/// Caps on recorded `nx.test` results (count, and characters of name / error each).
+const MAX_TEST_RESULTS: usize = 2000;
+const MAX_TEST_TEXT_CHARS: usize = 8 * 1024;
 
 const RUNTIME_JS: &str = include_str!("sandbox_runtime.js");
 const ASSERTIONS_JS: &str = include_str!("assertions.js");
@@ -64,6 +75,7 @@ pub struct TrackedScope {
     name: String,
     data: IndexMap<String, String>,
     pub changes: Vec<VariableChange>,
+    set_bytes: usize,
 }
 
 impl TrackedScope {
@@ -78,7 +90,20 @@ impl TrackedScope {
             name: name.to_string(),
             data,
             changes: Vec::new(),
+            set_bytes: 0,
         }
+    }
+
+    /// `set` for scripts: at most [`MAX_SET_OPS`] sets and [`MAX_SET_BYTES`] of key + value
+    /// bytes per scope per run.
+    fn try_set(&mut self, key: &str, value: &str) -> Result<(), String> {
+        let bytes = self.set_bytes.saturating_add(key.len() + value.len());
+        if self.changes.len() >= MAX_SET_OPS || bytes > MAX_SET_BYTES {
+            return Err("too many variable changes in one script run".into());
+        }
+        self.set_bytes = bytes;
+        self.set(key, value);
+        Ok(())
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
@@ -264,6 +289,8 @@ struct HostState {
     globals: TrackedScope,
     visualizer: Option<Visualizer>,
     result: ScriptResult,
+    log_bytes: usize,
+    log_truncated: bool,
 }
 
 impl ScriptSandbox {
@@ -289,6 +316,8 @@ impl ScriptSandbox {
             globals: context.globals.clone(),
             visualizer: context.visualizer.take(),
             result: ScriptResult::default(),
+            log_bytes: 0,
+            log_truncated: false,
         }));
 
         let final_request = self.run(script, &payload, &state);
@@ -389,7 +418,11 @@ impl ScriptSandbox {
         ctx.with(|ctx| {
             let host = {
                 let state = state.clone();
+                let expired = expired.clone();
                 move |op: String, args_json: String| -> String {
+                    if expired() {
+                        return json!({"ok": false, "e": "Script execution timed out"}).to_string();
+                    }
                     host_call(&state, &op, &args_json)
                 }
             };
@@ -508,6 +541,9 @@ fn build_payload(context: &ScriptContext) -> String {
 
 /// The `host(op, argsJson)` bridge: always returns `{"ok":true,"v":...}` or `{"ok":false,"e":"..."}`.
 fn host_call(state: &Rc<RefCell<HostState>>, op: &str, args_json: &str) -> String {
+    if args_json.len() > MAX_HOST_ARG_BYTES {
+        return json!({"ok": false, "e": "host call payload too large"}).to_string();
+    }
     let outcome = serde_json::from_str::<Value>(args_json)
         .map_err(|e| e.to_string())
         .and_then(|v| match v {
@@ -545,7 +581,7 @@ fn handle(st: &mut HostState, op: &str, args: &[Value]) -> Result<Option<Value>,
                         .map(|s| Value::String(s.to_string())))
                 }
                 "set" => {
-                    scope.set(str_arg(op, args, 0)?, str_arg(op, args, 1)?);
+                    scope.try_set(str_arg(op, args, 0)?, str_arg(op, args, 1)?)?;
                     return Ok(None);
                 }
                 "unset" => {
@@ -590,8 +626,23 @@ fn handle(st: &mut HostState, op: &str, args: &[Value]) -> Result<Option<Value>,
             if !matches!(level, "log" | "warn" | "error" | "info") {
                 return Err("invalid log level".into());
             }
-            let encoded: Vec<Value> =
-                serde_json::from_str(str_arg(op, args, 1)?).map_err(|e| e.to_string())?;
+            let raw = str_arg(op, args, 1)?;
+            st.log_bytes = st.log_bytes.saturating_add(raw.len());
+            if st.log_truncated
+                || st.result.logs.len() >= MAX_LOG_ENTRIES
+                || st.log_bytes > MAX_LOG_BYTES
+            {
+                if !st.log_truncated {
+                    st.log_truncated = true;
+                    st.result.logs.push(LogEntry {
+                        level: "warn".to_string(),
+                        args: vec![Value::String("[log truncated]".to_string())],
+                        timestamp: chrono::Utc::now().timestamp_millis(),
+                    });
+                }
+                return Ok(None);
+            }
+            let encoded: Vec<Value> = serde_json::from_str(raw).map_err(|e| e.to_string())?;
             let decoded = encoded
                 .iter()
                 .map(|a| {
@@ -622,10 +673,14 @@ fn handle(st: &mut HostState, op: &str, args: &[Value]) -> Result<Option<Value>,
             Ok(None)
         }
         "test" => {
+            if st.result.test_results.len() >= MAX_TEST_RESULTS {
+                return Ok(None);
+            }
+            let clip = |s: &str| s.chars().take(MAX_TEST_TEXT_CHARS).collect::<String>();
             st.result.test_results.push(TestResult {
-                name: str_arg(op, args, 0)?.to_string(),
+                name: clip(str_arg(op, args, 0)?),
                 passed: args.get(1) == Some(&Value::Bool(true)),
-                error: args.get(2).and_then(Value::as_str).map(str::to_string),
+                error: args.get(2).and_then(Value::as_str).map(clip),
                 duration: args.get(3).and_then(Value::as_f64).unwrap_or(0.0),
             });
             Ok(None)

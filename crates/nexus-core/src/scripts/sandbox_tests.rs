@@ -1123,3 +1123,47 @@ fn no_filesystem_network_or_loader_features_are_enabled() {
     assert!(line("jsonschema").contains("default-features = false"));
     assert!(!line("jsonschema").contains("resolve-"));
 }
+
+#[test]
+fn log_flood_is_truncated_with_bounded_buffer() {
+    let r = ScriptSandbox::new(5_000).execute(
+        "const s = 'x'.repeat(100000); for (let i = 0; i < 2000; i++) console.log(s);",
+        &mut make_context(),
+    );
+    let bytes: usize = r
+        .logs
+        .iter()
+        .map(|l| l.args.iter().map(|a| a.to_string().len()).sum::<usize>())
+        .sum();
+    assert!(bytes <= 4 * 1024 * 1024 + 1024, "{bytes}");
+    assert!(r.logs.len() <= 1001);
+    assert_eq!(r.logs.last().unwrap().args[0], json!("[log truncated]"));
+}
+
+#[test]
+fn huge_string_allocation_fails_with_memory_error() {
+    let r = exec("let s = 'x'.repeat(1 << 20); const a = []; while (true) a.push(s + a.length);");
+    assert!(r.error.is_some(), "expected memory error");
+}
+
+#[test]
+fn test_results_are_capped() {
+    let r = ScriptSandbox::new(10_000).execute(
+        "const n = 'n'.repeat(100000); for (let i = 0; i < 2500; i++) nx.test(n, () => {});",
+        &mut make_context(),
+    );
+    assert_eq!(r.test_results.len(), 2000);
+    assert!(r.test_results[0].name.len() <= 8 * 1024);
+}
+
+#[test]
+fn variable_sets_are_capped_per_scope() {
+    let r = exec("for (let i = 0; i < 2000; i++) nx.environment.set('k' + i, 'v');");
+    assert!(r.error.is_some(), "expected cap error");
+    let r = exec(
+        "const v = 'x'.repeat(1000000); for (let i = 0; i < 6; i++) nx.globals.set('k' + i, v);",
+    );
+    assert!(r.error.is_some(), "expected byte cap error");
+    let r = exec("for (let i = 0; i < 100; i++) nx.environment.set('k' + i, 'v');");
+    assert!(r.error.is_none());
+}

@@ -19,6 +19,7 @@ pub mod response;
 pub mod runner;
 pub mod scripts;
 pub mod service;
+pub mod trust;
 pub mod types;
 pub mod visualizer;
 pub mod websocket;

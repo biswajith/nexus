@@ -282,6 +282,14 @@ impl NexusApp {
             }
         });
 
+        if let Some(dir) = self.tabs.tabs[idx]
+            .origin
+            .as_ref()
+            .map(|o| o.dir_name.clone())
+        {
+            self.untrusted_banner(ui, &dir);
+        }
+
         // sub tabs
         let tab = &self.tabs.tabs[idx];
         let pc = tab

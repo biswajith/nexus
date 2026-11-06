@@ -76,38 +76,60 @@ pub fn render_template(template: &str, context: &Value) -> String {
     process_template(template, context)
 }
 
+/// Single pass over the template: each tag is rendered where it is found and scanning resumes
+/// after it in the *template*, so substituted data is never re-scanned as template source.
 fn process_template(tmpl: &str, ctx: &Value) -> String {
-    let result = EACH_RE.replace_all(tmpl, |caps: &Captures| {
-        let Some(Value::Array(items)) = resolve(ctx, &caps[1]) else {
-            return String::new();
-        };
-        items
+    // Tag kinds in priority order for matches starting at the same offset.
+    let regexes: [&Regex; 5] = [&EACH_RE, &IF_RE, &UNLESS_RE, &RAW_RE, &ESCAPED_RE];
+    let mut next: [Option<Captures>; 5] = [None, None, None, None, None];
+    let mut out = String::with_capacity(tmpl.len());
+    let mut pos = 0;
+    while pos < tmpl.len() {
+        for (slot, re) in next.iter_mut().zip(regexes) {
+            if slot
+                .as_ref()
+                .is_none_or(|c| c.get(0).unwrap().start() < pos)
+            {
+                *slot = re.captures_at(tmpl, pos);
+            }
+        }
+        let Some((kind, caps)) = next
             .iter()
             .enumerate()
-            .map(|(index, item)| process_template(&caps[2], &item_context(ctx, item, index)))
-            .collect::<String>()
-    });
-    let result = IF_RE.replace_all(&result, |caps: &Captures| {
-        if is_truthy(resolve(ctx, &caps[1]).as_ref()) {
-            process_template(&caps[2], ctx)
-        } else {
-            String::new()
+            .filter_map(|(k, c)| c.as_ref().map(|c| (k, c)))
+            .min_by_key(|(k, c)| (c.get(0).unwrap().start(), *k))
+        else {
+            break;
+        };
+        let whole = caps.get(0).unwrap();
+        out.push_str(&tmpl[pos..whole.start()]);
+        match kind {
+            0 => {
+                if let Some(Value::Array(items)) = resolve(ctx, &caps[1]) {
+                    for (index, item) in items.iter().enumerate() {
+                        out.push_str(&process_template(&caps[2], &item_context(ctx, item, index)));
+                    }
+                }
+            }
+            1 => {
+                if is_truthy(resolve(ctx, &caps[1]).as_ref()) {
+                    out.push_str(&process_template(&caps[2], ctx));
+                }
+            }
+            2 => {
+                if !is_truthy(resolve(ctx, &caps[1]).as_ref()) {
+                    out.push_str(&process_template(&caps[2], ctx));
+                }
+            }
+            3 => out.push_str(&to_js_string(resolve(ctx, caps[1].trim()).as_ref())),
+            _ => out.push_str(&escape_html(&to_js_string(
+                resolve(ctx, caps[1].trim()).as_ref(),
+            ))),
         }
-    });
-    let result = UNLESS_RE.replace_all(&result, |caps: &Captures| {
-        if is_truthy(resolve(ctx, &caps[1]).as_ref()) {
-            String::new()
-        } else {
-            process_template(&caps[2], ctx)
-        }
-    });
-    let result = RAW_RE.replace_all(&result, |caps: &Captures| {
-        to_js_string(resolve(ctx, caps[1].trim()).as_ref())
-    });
-    let result = ESCAPED_RE.replace_all(&result, |caps: &Captures| {
-        escape_html(&to_js_string(resolve(ctx, caps[1].trim()).as_ref()))
-    });
-    result.into_owned()
+        pos = whole.end();
+    }
+    out.push_str(&tmpl[pos..]);
+    out
 }
 
 /// Scope for one `{{#each}}` iteration: parent scope, then the item's own keys (objects only),

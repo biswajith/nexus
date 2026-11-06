@@ -10,4 +10,5 @@ mod runner;
 mod sidebar;
 mod tab_bar;
 mod toolbar;
+mod trust;
 mod ws;

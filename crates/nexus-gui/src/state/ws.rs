@@ -8,6 +8,29 @@ use nexus_core::websocket::{WsConnectionStatus, WsDirection, WsEvent, WsMessage}
 
 /// The message log keeps this many rows (core keeps 1000 messages).
 pub const MAX_ROWS: usize = 2000;
+/// ... and at most this many bytes of message data.
+pub const MAX_ROW_BYTES: usize = 16 * 1024 * 1024;
+
+fn row_bytes(r: &WsRow) -> usize {
+    match r {
+        WsRow::Message(m) => m.data.len(),
+        WsRow::Note { text, .. } => text.len(),
+    }
+}
+
+/// Drops the oldest rows until the count and byte caps hold (the newest row always stays).
+pub fn evict_rows(rows: &mut Vec<WsRow>, max_rows: usize, max_bytes: usize) {
+    let mut total: usize = rows.iter().map(row_bytes).sum();
+    let mut drop = rows.len().saturating_sub(max_rows);
+    for r in &rows[..drop] {
+        total -= row_bytes(r);
+    }
+    while total > max_bytes && drop + 1 < rows.len() {
+        total -= row_bytes(&rows[drop]);
+        drop += 1;
+    }
+    rows.drain(..drop);
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum DirFilter {
@@ -109,10 +132,7 @@ impl WsSession {
 
     pub fn push(&mut self, row: WsRow) {
         self.rows.push(row);
-        if self.rows.len() > MAX_ROWS {
-            let excess = self.rows.len() - MAX_ROWS;
-            self.rows.drain(..excess);
-        }
+        evict_rows(&mut self.rows, MAX_ROWS, MAX_ROW_BYTES);
     }
 
     pub fn note(&mut self, kind: NoteKind, text: impl Into<String>) {
@@ -239,5 +259,28 @@ impl WsState {
     pub fn active_mut(&mut self) -> &mut WsSession {
         let i = self.active.min(self.sessions.len() - 1);
         &mut self.sessions[i]
+    }
+}
+
+#[cfg(test)]
+mod evict_tests {
+    use super::*;
+
+    fn note(len: usize) -> WsRow {
+        WsRow::Note {
+            at: 0,
+            kind: NoteKind::Info,
+            text: "x".repeat(len),
+        }
+    }
+
+    #[test]
+    fn rows_are_evicted_by_bytes_oldest_first() {
+        let mut v: Vec<WsRow> = (0..5).map(|_| note(100)).collect();
+        evict_rows(&mut v, 2000, 250);
+        assert_eq!(v.len(), 2);
+        let mut v = vec![note(10), note(1000)];
+        evict_rows(&mut v, 2000, 250);
+        assert_eq!(v.len(), 1);
     }
 }

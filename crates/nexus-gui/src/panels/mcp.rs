@@ -1136,13 +1136,12 @@ fn mcp_tester(ui: &mut Ui, s: &mut McpSession, action: &mut Option<Action>) {
 
 fn decode_image(b64: &str) -> Option<ColorImage> {
     use base64::Engine;
+    // ~48 MiB of decoded data is far above any image worth a texture.
+    if b64.len() > 64 * 1024 * 1024 {
+        return None;
+    }
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(b64.trim())
         .ok()?;
-    let img = image::load_from_memory(&bytes).ok()?.to_rgba8();
-    let size = [img.width() as usize, img.height() as usize];
-    if size[0] * size[1] > 16_000_000 {
-        return None;
-    }
-    Some(ColorImage::from_rgba_unmultiplied(size, img.as_raw()))
+    crate::state::response::decode_image(&bytes)
 }

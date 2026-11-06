@@ -516,7 +516,7 @@ fn request_ids_never_become_file_names() {
 fn create_collection_claims_a_fresh_directory() {
     let src = include_str!("mod.rs");
     let body = src
-        .split("pub fn create_collection")
+        .split("fn write_collection")
         .nth(1)
         .unwrap()
         .split("pub fn save_request")

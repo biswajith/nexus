@@ -449,3 +449,34 @@ fn options_and_messages_use_the_ts_json_shapes() {
         "closing"
     );
 }
+
+fn msg_of(len: usize) -> WsMessage {
+    WsMessage {
+        id: String::new(),
+        direction: WsDirection::Received,
+        timestamp: 0,
+        kind: WsMessageType::Text,
+        data: "x".repeat(len),
+        size: len as u64,
+    }
+}
+
+#[test]
+fn message_log_is_evicted_by_bytes_oldest_first() {
+    let mut v: Vec<WsMessage> = (0..5).map(|_| msg_of(100)).collect();
+    evict_messages(&mut v, 1000, 250);
+    assert_eq!(v.len(), 2);
+    let mut v = vec![msg_of(10), msg_of(1000)];
+    evict_messages(&mut v, 1000, 250);
+    assert_eq!(v.len(), 1, "newest message always stays");
+    let mut v: Vec<WsMessage> = (0..5).map(|_| msg_of(1)).collect();
+    evict_messages(&mut v, 3, 1000);
+    assert_eq!(v.len(), 3);
+}
+
+#[test]
+fn huge_message_data_is_truncated_for_display() {
+    let t = truncate_display("é".repeat(10), 5);
+    assert!(t.starts_with("éé") && t.ends_with("[message truncated]"));
+    assert_eq!(truncate_display("abc".into(), 5), "abc");
+}

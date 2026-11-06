@@ -10,7 +10,106 @@ use crate::types::*;
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 
+/// Absolute node budget for an imported YAML document (a 10 MB real spec is ~1-2M nodes).
+const MAX_YAML_NODES: usize = 4_000_000;
+/// Folders one operation is listed under at most (each copy clones the request).
+const MAX_TAGS_PER_OPERATION: usize = 32;
 const HTTP_METHODS: [&str; 7] = ["get", "post", "put", "patch", "delete", "head", "options"];
+
+/// Parses YAML into a JSON value, failing once the number of nodes (after alias expansion)
+/// exceeds a budget proportional to the input size. serde_yaml replays every alias, so a tiny
+/// file can otherwise expand to gigabytes ("billion laughs"); the budget stops it early.
+fn parse_yaml_bounded(data: &str) -> Result<Value> {
+    use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+    use std::cell::Cell;
+    use std::fmt;
+
+    struct Seed<'a>(&'a Cell<usize>);
+
+    impl<'a> Seed<'a> {
+        fn tick<E: serde::de::Error>(&self) -> std::result::Result<(), E> {
+            let left = self.0.get();
+            if left == 0 {
+                return Err(E::custom(
+                    "document expands to too many nodes (YAML aliases nest or repeat too much)",
+                ));
+            }
+            self.0.set(left - 1);
+            Ok(())
+        }
+    }
+
+    impl<'de, 'a> DeserializeSeed<'de> for Seed<'a> {
+        type Value = Value;
+        fn deserialize<D: serde::Deserializer<'de>>(
+            self,
+            d: D,
+        ) -> std::result::Result<Value, D::Error> {
+            d.deserialize_any(self)
+        }
+    }
+
+    impl<'de, 'a> Visitor<'de> for Seed<'a> {
+        type Value = Value;
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("any YAML value")
+        }
+        fn visit_bool<E: serde::de::Error>(self, v: bool) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::from(v))
+        }
+        fn visit_i64<E: serde::de::Error>(self, v: i64) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::from(v))
+        }
+        fn visit_u64<E: serde::de::Error>(self, v: u64) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::from(v))
+        }
+        fn visit_f64<E: serde::de::Error>(self, v: f64) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::from(v))
+        }
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::from(v))
+        }
+        fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::Null)
+        }
+        fn visit_none<E: serde::de::Error>(self) -> std::result::Result<Value, E> {
+            self.tick::<E>().map(|()| Value::Null)
+        }
+        fn visit_some<D: serde::Deserializer<'de>>(
+            self,
+            d: D,
+        ) -> std::result::Result<Value, D::Error> {
+            d.deserialize_any(self)
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Value, A::Error> {
+            self.tick::<A::Error>()?;
+            let mut out = Vec::new();
+            while let Some(v) = seq.next_element_seed(Seed(self.0))? {
+                out.push(v);
+            }
+            Ok(Value::Array(out))
+        }
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Value, A::Error> {
+            self.tick::<A::Error>()?;
+            let mut out = serde_json::Map::new();
+            while let Some(k) = map.next_key::<String>()? {
+                self.tick::<A::Error>()?;
+                out.insert(k, map.next_value_seed(Seed(self.0))?);
+            }
+            Ok(Value::Object(out))
+        }
+    }
+
+    let budget = Cell::new((200_000 + data.len().saturating_mul(2)).min(MAX_YAML_NODES));
+    let de = serde_yaml::Deserializer::from_str(data);
+    let mut docs = de.into_iter();
+    let first = docs
+        .next()
+        .ok_or_else(|| Error::Other("Invalid YAML: empty document".into()))?;
+    Seed(&budget)
+        .deserialize(first)
+        .map_err(|e| Error::Other(format!("Invalid YAML: {e}")))
+}
 
 /// Parses a JSON or YAML spec and returns one collection, one environment per server (when there
 /// is more than one), and warnings. `$ref`s are not resolved (a warning is produced instead).
@@ -20,7 +119,7 @@ pub fn import(data: &str) -> Result<ImportResult> {
     let spec: Value = if trimmed.starts_with('{') {
         serde_json::from_str(trimmed)?
     } else {
-        serde_yaml::from_str(trimmed).map_err(|e| Error::Other(format!("Invalid YAML: {e}")))?
+        parse_yaml_bounded(trimmed)?
     };
     if !spec.is_object() {
         return Err(Error::Other(
@@ -134,10 +233,14 @@ impl Importer {
                     };
                     let request =
                         self.build_request(path, method, operation, path_params, is_swagger2);
-                    let tags: Vec<&str> = list(operation.get("tags"))
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .collect();
+                    // Each tag clones the whole request, so repeats are dropped (first-seen order
+                    // kept) and the count is capped.
+                    let mut tags: Vec<&str> = Vec::new();
+                    for t in list(operation.get("tags")).iter().filter_map(Value::as_str) {
+                        if !tags.contains(&t) && tags.len() < MAX_TAGS_PER_OPERATION {
+                            tags.push(t);
+                        }
+                    }
                     if tags.is_empty() {
                         untagged.push(CollectionItem::Request(request));
                     } else {

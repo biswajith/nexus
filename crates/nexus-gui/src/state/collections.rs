@@ -20,6 +20,10 @@ pub struct CollectionsState {
     /// Inline "new request" input: (directory name, buffer).
     pub adding_request: Option<(String, String)>,
     pub error: Option<String>,
+    /// Directory names of loaded collections the user has not trusted (imported / synced).
+    pub untrusted: HashSet<String>,
+    /// The untrusted ones that were trusted before and changed outside the app.
+    pub changed: HashSet<String>,
 }
 
 /// Directory name of a collection (last path segment).
@@ -52,6 +56,36 @@ impl CollectionsState {
     pub fn load(&mut self, app: &App, dir: &str) {
         if let Some(c) = self.fail(app.collection_load(dir)) {
             self.loaded.insert(dir.to_string(), c);
+            self.recheck_trust(app, dir);
+        }
+    }
+
+    /// Re-reads the trust state from disk (also done before each send / run).
+    pub fn recheck_trust(&mut self, app: &App, dir: &str) {
+        use nexus_core::collections::TrustStatus;
+        self.untrusted.remove(dir);
+        self.changed.remove(dir);
+        match app.collection_trust_status(dir) {
+            TrustStatus::Trusted => {}
+            TrustStatus::Untrusted => {
+                self.untrusted.insert(dir.to_string());
+            }
+            TrustStatus::Changed => {
+                self.untrusted.insert(dir.to_string());
+                self.changed.insert(dir.to_string());
+            }
+        }
+    }
+
+    pub fn is_untrusted(&self, dir: &str) -> bool {
+        self.untrusted.contains(dir)
+    }
+
+    /// Persists the user's decision to trust the collection in `dir`.
+    pub fn trust(&mut self, app: &App, dir: &str) {
+        if self.fail(app.collection_trust(dir)).is_some() {
+            self.untrusted.remove(dir);
+            self.changed.remove(dir);
         }
     }
 
@@ -108,6 +142,7 @@ impl CollectionsState {
     pub fn delete(&mut self, app: &App, dir: &str) {
         if self.fail(app.collection_delete(dir)).is_some() {
             self.loaded.remove(dir);
+            self.untrusted.remove(dir);
             self.refresh(app);
         }
     }

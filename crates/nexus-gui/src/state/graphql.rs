@@ -205,6 +205,7 @@ impl GqlState {
     }
 
     pub fn add_sub(&mut self, at: i64, text: String, is_error: bool) {
+        let text = nexus_core::websocket::truncate_display(text, 256 * 1024);
         self.sub_count += 1;
         self.sub_events.push(SubEntry {
             n: self.sub_count,
@@ -212,8 +213,11 @@ impl GqlState {
             text,
             is_error,
         });
-        if self.sub_events.len() > 1000 {
-            self.sub_events.remove(0);
+        let mut bytes: usize = self.sub_events.iter().map(|e| e.text.len()).sum();
+        while self.sub_events.len() > 1
+            && (self.sub_events.len() > 1000 || bytes > 16 * 1024 * 1024)
+        {
+            bytes -= self.sub_events.remove(0).text.len();
         }
     }
 
