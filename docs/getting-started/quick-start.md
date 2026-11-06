@@ -7,7 +7,7 @@ This guide walks you through sending your first API request, saving it to a coll
 1. Launch Nexus. A new request tab opens automatically.
 2. Select **GET** from the method dropdown.
 3. Type a URL in the URL bar, for example: `https://jsonplaceholder.typicode.com/posts/1`
-4. Click **Send** (or press `Cmd+Enter` / `Ctrl+Enter`).
+4. Click **Send** (or press `Ctrl+Enter`).
 
 The response appears in the bottom pane with the status code, response time, size, and formatted JSON body.
 

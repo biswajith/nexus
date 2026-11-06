@@ -1,7 +1,24 @@
 # Nexus — Postman Replacement Feature Spec & Implementation Plan
 
-> A local-first, offline API development tool built with TypeScript.
+> A local-first, offline API development tool built with Rust and a native egui UI.
 > All collections and environments are stored on disk — no cloud sync, no accounts required.
+
+> **Status note.** This file is the original product spec; the implementation diverges from it.
+> The app is a Rust workspace: the engine in `crates/nexus-core` and a native egui/eframe UI in
+> `crates/nexus-gui`. (It started as a TypeScript design and went through a Tauri + web UI phase;
+> both are gone.) Code samples below are illustrative TypeScript from the original spec, and UI
+> notes that name web libraries (CodeMirror, React, iframes/webviews) describe the spec, not the app.
+> What actually exists today: HTTP client, collections/folders, environments + dynamic variables,
+> auth (none, API key, bearer, basic, digest, AWS SigV4; `oauth2` only sends a static access token),
+> pre-request/post-response scripts (QuickJS sandbox) with assertions, collection runner (CSV/JSON data
+> files via a file picker), GraphQL (queries, introspection,
+> `graphql-transport-ws` subscriptions), WebSocket, MCP client, history, console, cURL codegen,
+> Markdown/HTML docs, Postman/OpenAPI/Swagger/cURL import, Nexus/Postman export, response visualizer,
+> command palette, light/dark/system theme. HTML preview and the visualizer open in the system browser.
+> **Not implemented:** SSE client, gRPC, mock server, proxy/traffic capture, certificate manager,
+> CLI runner, cookie manager UI (the cookie jar exists in core but is not wired in), OAuth2 grant flows
+> / PKCE / token refresh, Hawk, Insomnia import, DNS/TCP/TLS timing (only TTFB, download and total are
+> measured; the rest are 0).
 
 ---
 
@@ -44,16 +61,13 @@
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Runtime | Node.js 20+ | Native `fetch` via undici, ESM support, stable LTS |
-| Language | TypeScript (strict mode) | Type safety across the entire stack |
-| Desktop Framework | Electron (or Tauri for lighter binary) | Cross-platform, full OS access for file I/O and proxy |
-| UI Framework | React 18+ with Vite | Fast HMR, rich ecosystem, component model |
-| State Management | Zustand | Lightweight, TypeScript-friendly, no boilerplate |
-| Styling | Tailwind CSS + Radix UI primitives | Utility-first, accessible headless components |
+| Language | Rust (engine and UI) | Memory-safe, fast engine; one language, one binary |
+| UI Framework | egui / eframe (glow) | Native, no webview, small footprint; AccessKit accessibility |
+| State Management | Plain Rust structs | Results from async work arrive over a channel |
 | Data Storage | Local filesystem (JSON/YAML files) | Git-friendly, no database needed, human-readable |
-| HTTP Engine | `undici` (Node.js official HTTP client) | Fastest Node.js HTTP client, powers native `fetch`, connection pooling |
-| Scripting Sandbox | `vm2` / `isolated-vm` | Secure JS execution for pre-request and test scripts |
-| IPC | Electron IPC (main ↔ renderer) | Secure bridge between UI and Node.js backend |
+| HTTP Engine | `reqwest` (rustls) | Async, connection pooling, proxy support |
+| Scripting Sandbox | `rquickjs` (QuickJS) | Fresh runtime per script with timeout and memory limit |
+| UI to engine | Direct calls to `nexus_core::service::App` | No IPC; long work runs on a tokio runtime |
 
 ### File-Based Storage Layout
 
@@ -87,35 +101,14 @@
 
 ```
 nexus/
-├── packages/
-│   ├── core/                      # Pure TypeScript engine (no UI dependency)
-│   │   ├── src/
-│   │   │   ├── http/              # HTTP client wrapper around undici
-│   │   │   ├── collections/       # Collection CRUD, file I/O
-│   │   │   ├── environments/      # Variable resolution engine
-│   │   │   ├── scripts/           # Script sandbox (vm2/isolated-vm)
-│   │   │   ├── runner/            # Collection runner engine
-│   │   │   ├── auth/              # Auth strategy implementations
-│   │   │   ├── mock/              # Mock server engine
-│   │   │   └── types/             # Shared TypeScript interfaces
-│   │   └── package.json
-│   ├── cli/                       # CLI runner (like Newman)
-│   │   ├── src/
-│   │   │   ├── commands/          # run, export, import commands
-│   │   │   └── reporters/         # CLI, JSON, HTML reporters
-│   │   └── package.json
-│   └── desktop/                   # Electron + React app
-│       ├── src/
-│       │   ├── main/              # Electron main process
-│       │   ├── preload/           # Secure IPC bridge
-│       │   └── renderer/          # React UI
-│       │       ├── components/
-│       │       ├── hooks/
-│       │       ├── stores/        # Zustand stores
-│       │       └── pages/
-│       └── package.json
-├── package.json                   # Monorepo root (npm workspaces or turborepo)
-└── tsconfig.base.json
+├── Cargo.toml                     # Rust workspace
+├── crates/
+│   ├── nexus-core/                # Engine library (no UI dependency)
+│   │   └── src/                   # auth, codegen, collections, console, cookies, docs,
+│   │                              # environments, fs, graphql, history, http, import, mcp,
+│   │                              # response, runner, scripts, service, types, visualizer, websocket
+│   └── nexus-gui/                 # egui app (binary `nexus`)
+│       └── src/                   # app, runtime, state, panels, widgets, editor, theme
 ```
 
 ### Key TypeScript Interfaces
@@ -190,7 +183,7 @@ interface KeyValuePair {
 | File uploads | Support `multipart/form-data` with file picker |
 | Request settings | Follow redirects, timeout, SSL verification toggle, max redirect count |
 | Send & cancel | Send button triggers request; cancel aborts in-flight request |
-| Response timing | Show DNS, TCP, TLS, TTFB, download, total time |
+| Response timing | Spec: DNS, TCP, TLS, TTFB, download, total. **Implemented: TTFB, download, total (DNS/TCP/TLS are 0)** |
 
 ### Implementation Plan
 
@@ -484,10 +477,10 @@ class VariableStore {
 | API Key | Send key as header or query param |
 | Bearer Token | `Authorization: Bearer <token>` |
 | Basic Auth | `Authorization: Basic base64(user:pass)` |
-| OAuth 2.0 | Full flow: Authorization Code, Client Credentials, Password, Implicit, PKCE |
+| OAuth 2.0 | Spec: full grant flows + PKCE. **Implemented: static access token only (no grant flows, PKCE or refresh)** |
 | Digest Auth | Challenge-response authentication |
 | AWS Signature v4 | Sign requests for AWS APIs |
-| Hawk | MAC-based auth |
+| Hawk | MAC-based auth (**not implemented**; behaves as no auth) |
 | Custom | User-defined via pre-request scripts |
 
 ### Auth Inheritance
@@ -1127,6 +1120,8 @@ class WebSocketClient extends EventEmitter {
 
 ## 11. Server-Sent Events (SSE) Client
 
+> **Status: not implemented.**
+
 **What it is:** A client for Server-Sent Events endpoints that displays the event stream in real time with event name, data, and ID.
 
 **Why it matters:** SSE is increasingly used for real-time features (AI streaming responses, live feeds). Testing these requires a persistent connection viewer, not a standard request/response cycle.
@@ -1205,6 +1200,8 @@ class SseClient extends EventEmitter {
 ---
 
 ## 12. gRPC Client
+
+> **Status: not implemented.**
 
 **What it is:** A client for testing gRPC services — load `.proto` files or use server reflection, compose request messages, and send unary, server-streaming, client-streaming, and bidirectional-streaming RPCs.
 
@@ -1377,6 +1374,8 @@ interface TimingWaterfall {
 
 ## 14. Cookie Management
 
+> **Status: partial.** `NexusCookieJar` exists in `nexus-core` but is not wired into `http_send` or the UI.
+
 **What it is:** A cookie jar that persists across requests, with a UI to view, edit, add, and delete cookies per domain.
 
 **Why it matters:** Many APIs use cookies for session management. Without cookie persistence, you'd have to manually copy `Set-Cookie` values. The cookie jar automates this.
@@ -1459,6 +1458,8 @@ class NexusCookieJar {
 
 ## 15. Proxy & Traffic Capture
 
+> **Status: not implemented.**
+
 **What it is:** A built-in HTTP/HTTPS proxy that captures API traffic from browsers or mobile devices, letting you inspect requests and save them to a collection.
 
 **Why it matters:** When debugging, you often want to see what requests a browser or mobile app is actually sending. Capturing traffic through a proxy lets you observe and replay real requests.
@@ -1539,6 +1540,8 @@ class ProxyServer extends EventEmitter {
 ---
 
 ## 16. Mock Server
+
+> **Status: not implemented.**
 
 **What it is:** A local HTTP server that returns predefined responses based on URL, method, and optional request matching rules. Useful for frontend development when the backend isn't ready.
 
@@ -2031,6 +2034,8 @@ class DocGenerator {
 
 ## 21. CLI Runner (Newman Equivalent)
 
+> **Status: not implemented.**
+
 **What it is:** A standalone command-line tool that runs Nexus collections outside the desktop app — in CI/CD pipelines, scripts, or terminal workflows.
 
 **Why it matters:** CI/CD integration is essential. You want to run your API tests as part of every deploy. The CLI makes collections executable in any automated environment.
@@ -2172,6 +2177,8 @@ class Visualizer {
 ---
 
 ## 23. Certificate & SSL Management
+
+> **Status: not implemented** (only the per-request `rejectUnauthorized` setting exists).
 
 **What it is:** Configure client certificates (mTLS), custom CA certificates, and SSL verification settings for requests to servers with non-standard TLS configurations.
 
@@ -2316,25 +2323,23 @@ class NexusConsole extends EventEmitter {
 
 | Layer | Technology | Version |
 |---|---|---|
-| Language | TypeScript | 5.x (strict mode) |
-| Runtime | Node.js | 20+ LTS |
-| Desktop Shell | Electron | 30+ |
-| UI Framework | React | 18+ |
-| Build Tool | Vite | 5+ |
-| State Management | Zustand | 4+ |
-| Styling | Tailwind CSS | 3+ |
-| Component Primitives | Radix UI | latest |
+| Language | Rust (engine/shell), TypeScript 5 (UI) | stable / strict mode |
+| Desktop Shell | Tauri | 2 |
+| UI Framework | React + React Spectrum S2 | 19 / S2 |
+| Build Tool | Vite | 6 |
+| State Management | Zustand | 5 |
 | Code Editor | CodeMirror | 6 |
-| HTTP Client | undici | 6+ |
-| WebSocket | ws | 8+ |
-| gRPC | @grpc/grpc-js | 1.9+ |
-| Script Sandbox | isolated-vm | 4+ |
-| Assertions | Custom (Chai-like) | — |
-| JSON Schema | Ajv | 8+ |
-| Cookie Jar | tough-cookie | 4+ |
-| CLI | commander | 12+ |
-| Faker Data | @faker-js/faker | 8+ |
-| Monorepo | npm workspaces or Turborepo | — |
+| HTTP Client | reqwest (rustls) | 0.13 |
+| WebSocket | tokio-tungstenite | 0.30 |
+| Script Sandbox | rquickjs (QuickJS) | 0.14 |
+| Assertions | Custom (Chai-like, in the sandbox) | — |
+| JSON Schema | jsonschema | 0.60 |
+| Cookie Jar | cookie_store | — |
+| MCP | rmcp | 3.9 |
+| Faker Data | fake + custom tables | — |
+| Workspace | Cargo workspace + standalone `ui` npm project | — |
+
+The spec originally listed gRPC, a CLI (commander), Tailwind/Radix and a mock server; none of those exist.
 
 ---
 

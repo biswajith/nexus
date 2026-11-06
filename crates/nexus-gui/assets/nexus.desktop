@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Nexus
+Comment=Native API client: HTTP, GraphQL, WebSocket, MCP and a collection runner
+Exec=nexus
+Icon=nexus
+Terminal=false
+Categories=Development;Network;

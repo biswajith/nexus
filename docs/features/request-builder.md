@@ -46,6 +46,8 @@ Select a body mode using radio buttons:
 | **Binary** | Binary file upload. |
 | **GraphQL** | Split editor with Query and Variables panes. Sends as JSON body with `query` and `variables` fields. |
 
+> Note: Form Data and Binary bodies are not sent yet; the sender handles text bodies (JSON, XML, text, HTML, URL-encoded).
+
 ### Auth
 
 Configure authentication for the request. See [Authentication](./authentication.md) for details on all supported auth types.
@@ -56,7 +58,7 @@ Pre-request and post-response script editors with snippet sidebar. See [Scripts]
 
 ## Sending Requests
 
-When you click **Send** (or press `Cmd+Enter`), Nexus:
+When you click **Send** (or press `Ctrl+Enter`), Nexus:
 
 1. Resolves all `{{variable}}` placeholders in the URL, headers, params, and body using the active environment and variable scopes.
 2. Runs the **pre-request script** (if any). The script can modify the URL, method, headers, and body.
@@ -99,7 +101,7 @@ Click the `{ }` button next to Send to copy the current request as a cURL comman
 
 ## Request Settings
 
-Settings are part of each request's configuration:
+Settings are stored in each request's JSON and honoured when sending. There is no UI for them yet; edit the request file to change them:
 
 | Setting | Default | Description |
 |---|---|---|
@@ -117,4 +119,4 @@ Open multiple request tabs simultaneously. Each tab maintains its own:
 - Loading state
 - Dirty state (unsaved changes shown as a blue dot)
 
-Switch tabs by clicking them. Close tabs with the × button or `Cmd+W`. Create new tabs with the + button or `Cmd+N`.
+Switch tabs by clicking them. Close tabs with the × button or `Ctrl+W`. Create new tabs with the + button or `Ctrl+N`.

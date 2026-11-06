@@ -1,0 +1,15 @@
+---
+description: egui UI patterns for crates/nexus-gui
+globs: "crates/nexus-gui/**/*.rs"
+alwaysApply: false
+---
+
+# egui patterns
+
+- UI state is plain Rust structs in `state/`; `NexusApp::show(ui)` is the single entry point shared by eframe and the tests.
+- Accessibility: every interactive widget, including custom-painted ones (tree rows, tabs, method badges, editors), must expose an AccessKit role and a label through the helpers in `widgets/` (`a11y`, `a11y_name`, ...). Keep eframe's `accesskit` feature on.
+- Colours come only from `theme.rs` token functions (`fg()`, `bg_app()`, `accent()`, ...), never literals, so both themes work. New text colours must pass the WCAG AA unit test in `theme.rs`.
+- Cached `Galley`s (text layouts) must be keyed on `theme::galley_epoch(ctx)` and the pixels-per-point; egui rebuilds the glyph atlas on a theme switch and stale layouts render as garbage.
+- Large text goes through `widgets/code_view.rs` (read-only) or `widgets/code_editor.rs` (editable): both lay out only visible lines. Do not put megabytes into a `TextEdit` or a `Label`.
+- Modal dialogs use `widgets/modal.rs` (backdrop blocks input, focus stays inside, Esc closes).
+- Keyboard shortcuts live in `shortcuts.rs` together with the help table and the command-palette list; add new ones in all three places.

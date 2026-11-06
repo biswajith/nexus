@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = ["crates/nexus-core", "crates/nexus-gui"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+indexmap = { version = "2", features = ["serde"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net"] }
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+nexus-core = { path = "crates/nexus-core" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
