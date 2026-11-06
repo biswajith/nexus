@@ -6,7 +6,7 @@ Nexus has a three-pane layout designed for efficient API development.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  Title Bar (drag region)                                 │
+│  Title Bar                                               │
 ├──────────────────────────────────────────────────────────┤
 │  Toolbar (panels, environment selector, theme, console)  │
 ├────────────┬─────────────────────────────────────────────┤
@@ -24,42 +24,38 @@ Nexus has a three-pane layout designed for efficient API development.
 
 ## Title Bar
 
-The title bar uses a native macOS-style inset design with traffic light controls. It serves as the window drag region.
+A slim bar with the app name; window decorations come from your desktop environment.
 
 ## Toolbar
 
 The toolbar spans the full width and contains:
 
-- **Sidebar toggle** — Show/hide the sidebar (`Cmd+B`).
-- **Panel tabs** — Switch between HTTP, GraphQL, WebSocket, MCP, and Runner panels (`Cmd+1` through `Cmd+5`).
+- **Sidebar toggle** — Show/hide the sidebar (`Ctrl+B`).
+- **Panel tabs** — Switch between HTTP, GraphQL, WebSocket, MCP, and Runner panels (`Ctrl+1` through `Ctrl+5`).
 - **Import button** — Opens the import/export modal for bringing in external, OpenAPI, cURL, or Nexus collections.
 - **Docs button** — Opens the API documentation generator.
-- **Environment selector** — Dropdown to pick the active environment. Appears in the center of the toolbar.
-- **Theme toggle** — Cycles between Dark, Light, and System color schemes.
-- **Console toggle** — Show/hide the console panel (`Cmd+J`).
+- **Environment selector** — Dropdown to pick the active environment, with a **Manage** button that opens the environment manager. Appears in the center of the toolbar.
+- **Theme button** — Labelled "Theme: Dark", "Theme: Light" or "Theme: System"; click to cycle. The choice is remembered.
+- **Console toggle** — Show/hide the console panel (`Ctrl+J`).
 
 ## Sidebar
 
-The sidebar (left pane, 300px default, resizable 200–600px) has three tabs:
+The sidebar (left pane, 300px default, resizable by dragging its edge, collapsible with `Ctrl+B`) has two tabs:
 
 ### Collections Tab
 - Displays all collections as an expandable tree.
 - Nested folders and requests shown with depth-based indentation.
 - Requests display their HTTP method with color coding.
-- Right-click context menus for adding requests, renaming, and deleting.
+- Right-click context menus (or the "More actions" button) for adding requests, saving the current tab, renaming, and deleting.
 - Inline input fields for creating and renaming collections.
 
-### Environments Tab
-- Lists all environments with variable count.
-- Click an environment to open the variable editor.
-- Create, edit, and delete environments.
-- Variables support String and Secret types (secrets are masked in the UI).
+Environments are managed in a dialog (toolbar **Manage**): list with variable counts; create, rename, duplicate, delete (with confirmation), activate; the editor has a name and a variable grid. Variables support String and Secret types (secrets are masked, with Show / Hide).
 
 ### History Tab
 - Chronological list of all sent requests.
 - Each entry shows method, URL, status code, and timestamp.
 - Click to re-open as a new request tab.
-- Virtualized list for performance when history grows large (>100 entries).
+- Only the visible rows are drawn, so long histories stay fast.
 - Clear button to purge history.
 
 ## Main Editor Area
@@ -74,13 +70,13 @@ The main area switches between panels:
 
 ### GraphQL Panel
 - URL input with Send, Schema (introspect), and Subscribe buttons.
-- CodeMirror editors for query and variables.
+- Code editors for query and variables, headers table, and a searchable schema browser.
 - Response tabs: Response data, Schema SDL, Subscription messages.
 
 ### WebSocket Panel
 - Connection bar with status indicator, URL input, Connect/Disconnect.
 - Message history with sent/received direction indicators.
-- Message composer textarea.
+- Message composer (`Ctrl+Enter` sends), filter box, and a detail pane for the selected message.
 
 ### MCP Panel
 - Connection configuration for stdio or HTTP transports.
@@ -90,7 +86,7 @@ The main area switches between panels:
 - Call history log.
 
 ### Runner Panel
-- Collection selector, iteration/delay configuration.
+- Collection (and folder) selector, iteration/delay configuration, stop-on-error and an optional CSV/JSON data file.
 - Progress bar with real-time results.
 - Per-request rows showing status, timing, and test results.
 
@@ -99,7 +95,7 @@ The main area switches between panels:
 The console panel (bottom, collapsible) shows:
 
 - Log entries with timestamps, level badges (INFO/WARN/ERR/DBG), and source labels (Script/HTTP/Var/Sys).
-- Level filter buttons and search input.
+- Level filter chips, text filter, Copy and an Auto-scroll toggle.
 - Clear button to reset the console.
 
 ## Theming

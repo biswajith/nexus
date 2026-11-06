@@ -7,36 +7,25 @@ alwaysApply: true
 
 ## Architecture
 
-- **Monorepo** with npm workspaces: `packages/core` (logic library) and `packages/desktop` (Electron app).
-- `@nexus/core` is a pure TypeScript library with no Electron or DOM dependencies.
-- `@nexus/desktop` has three layers: `main/` (Node.js Electron main), `preload/` (context bridge), `renderer/` (React UI).
+- **Cargo workspace** (`Cargo.toml`) with two crates: `crates/nexus-core` (engine + service layer, no UI) and `crates/nexus-gui` (native egui/eframe app, binary name `nexus`). No Node, no webview, no IPC.
+- `nexus-core` has no UI dependency. One module per concern: `auth codegen collections console cookies docs environments fs graphql history http import mcp response runner scripts service types visualizer websocket`.
+- `nexus_core::service::App` is the single entry point the GUI uses (sync CRUD plus async `http_send`, `runner_start`, `ws_*`, `graphql_*`, `mcp_*`; long operations take an event sink callback).
+- `nexus-gui` layout: `app.rs` (NexusApp state + frame loop), `runtime.rs` (tokio runtime, `Msg` channel back to the UI thread), `state/` (plain structs per domain, persisted UI state in `~/.nexus/ui-state.json`), `panels/` (toolbar, sidebar, tab bar, request, response, console, runner, ws, graphql, mcp, `dialogs/`), `widgets/` (painted widgets, code editor, code view, a11y helpers), `editor/` (editor model + completion logic), `theme.rs` (dark/light palettes), `shortcuts.rs`, `dialog_ops.rs`, `payload.rs`, `highlight.rs`.
 
-## Module System
+## Rust
 
-- ESM-only (`"type": "module"` in all `package.json` files).
-- All relative imports must end with `.js` extension.
-- Use `node:` prefix for Node built-ins.
-
-## Electron IPC
-
-- All renderer↔main communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
-- Handlers are registered in `ipc-handlers.ts`. The preload exposes them via `contextBridge` as `window.nexus`.
-- Never access Node APIs directly from the renderer.
-
-## State Management
-
-- Renderer uses **Zustand** stores in `renderer/stores/`.
-- One store per domain: `useRequestStore`, `useCollectionStore`, `useEnvironmentStore`, etc.
-- Cross-store reads use `useOtherStore.getState()` only in action handlers, never in render.
+- Errors: `thiserror` in core, `Result<T, String>` at the service boundary.
+- Never block the UI thread: HTTP, scripts, runner, WS, GraphQL, MCP run on the tokio runtime (`runtime.rs`); results arrive as `Msg` and the handler calls `request_repaint`. File reads and heavy parsing go to `spawn_blocking`.
+- All file writes and directory creation go through `nexus_core::fs` (0600 files, 0700 dirs).
+- Before finishing: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`.
+- Keep the dependency tree small; check `cargo tree` growth before adding a crate.
 
 ## Data Persistence
 
-- Collections are stored as directories under `~/.nexus/collections/` with `collection.json` metadata.
-- Environments, history, and tokens are JSON files under `~/.nexus/`.
+- Collections are directories under `~/.nexus/collections/` with `collection.json` metadata.
+- Environments, history, tokens and `ui-state.json` are JSON/JSONL files under `~/.nexus/`.
 - Item ordering is tracked via `itemOrder` arrays in metadata files.
 
 ## Naming
 
-- Files: `kebab-case.ts`. Classes: `PascalCase`. Functions/variables: `camelCase`.
-- Test files: `module-name.test.ts` alongside the source file.
-- Zustand stores: `use<Domain>Store`.
+- Rust: `snake_case` files/functions, `PascalCase` types. Core tests live in `tests.rs` / `*_tests.rs` next to the module; GUI tests live in `crates/nexus-gui/tests/`.

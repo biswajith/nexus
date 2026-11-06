@@ -2,84 +2,55 @@
 
 ## Prerequisites
 
-- **Node.js** 20 or later
-- **npm** 9 or later
+- **Rust** (stable, via [rustup](https://rustup.rs)). No Node.js, no webview, no GTK.
+- Linux: a Wayland or X11 session with OpenGL (Mesa). The usual runtime libraries (libxkbcommon, libwayland / libX11, libEGL, libGL) must be installed. Linux is the platform the app has been run and tested on.
 
 Verify your installation:
 
 ```bash
-node --version   # Should print v20.x.x or higher
-npm --version    # Should print 9.x.x or higher
+cargo --version
 ```
 
-## Clone & Install
+## Clone & Run
 
 ```bash
 git clone https://github.com/biswajith/nexus.git
 cd nexus
-npm install
-```
-
-This installs dependencies for all packages in the monorepo (root, `@nexus/core`, and `@nexus/desktop`).
-
-## Build & Run
-
-```bash
-# Build the core engine
-npm run build:core
-
-# Start the desktop app in development mode
-npm run dev
-```
-
-Or use the convenience script:
-
-```bash
 ./start.sh
 ```
 
-The Vite dev server starts at `http://localhost:5173`. The Electron main process loads this URL in development mode.
+`start.sh` checks for cargo and runs `cargo run --release -p nexus-gui`. The first run compiles the workspace, which takes a few minutes.
 
 ## Production Build
 
 ```bash
-# Build everything (core + desktop)
-npm run build
+cargo build --release -p nexus-gui   # binary: target/release/nexus
 ```
 
-The production build outputs to `packages/core/dist/` and `packages/desktop/dist/`.
+The release binary is self-contained. To get a launcher entry, copy `crates/nexus-gui/assets/nexus.desktop` to `~/.local/share/applications/` and `crates/nexus-gui/assets/nexus.png` to `~/.local/share/icons/hicolor/512x512/apps/`, and put `nexus` on your `PATH`.
 
-## Available Scripts
+## Development Commands
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start Vite dev server for the renderer |
-| `npm run build` | Build core + desktop for production |
-| `npm run build:core` | Build the core package only |
-| `npm run build:desktop` | Build the desktop package only |
-| `npm run typecheck` | Type-check all packages |
-| `npm run lint` | Lint all packages |
-| `npm run clean` | Remove dist folders and Vite cache |
+| `cargo run -p nexus-gui` | Debug build and run |
+| `cargo test --workspace` | Run all tests (engine and GUI) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Lint |
+| `cargo fmt --all --check` | Check formatting |
 
 ## Project Structure
 
 ```
 nexus/
-├── packages/
-│   ├── core/         # Pure TypeScript engine (no UI dependency)
-│   └── desktop/      # Electron + React application
-├── docs/             # Product documentation
-├── package.json      # Monorepo root (npm workspaces)
-├── turbo.json        # Turborepo build orchestration
-└── tsconfig.base.json
+├── crates/nexus-core/   # Rust engine library (no UI)
+├── crates/nexus-gui/    # egui app, binary `nexus`
+├── docs/                # Product documentation
+└── Cargo.toml           # Rust workspace
 ```
 
 ## System Requirements
 
 | Requirement | Minimum |
 |---|---|
-| Node.js | 20.0.0 |
-| npm | 9.0.0 |
-| OS | macOS 12+, Windows 10+, Ubuntu 20.04+ |
-| RAM | 4 GB (8 GB recommended) |
-| Disk | 500 MB for installation |
+| OS | Linux with Wayland or X11 and OpenGL |
+| RAM | 1 GB (the app itself uses well under 100 MB when idle) |

@@ -25,13 +25,13 @@ The status bar appears at the top of the response viewer and shows:
 
 The body tab has three view modes:
 
-**Pretty** — Formatted, syntax-highlighted output. JSON is pretty-printed with 2-space indentation. Large responses (>500 KB) are truncated with a "Show All" button to load the full content.
+**Pretty** — Formatted, syntax-highlighted output. JSON is pretty-printed with 2-space indentation. Large responses are fine: only the visible lines are drawn, a 10 MB body is formatted off the UI thread, and lines longer than 4000 characters are cut on screen (Copy and Save still use the full text). Use **Search** (`Ctrl+F`) to find text, with next / previous.
 
 **Raw** — Unformatted body text displayed as-is.
 
-**Preview** — For HTML responses, renders the content in a sandboxed iframe. Non-HTML content falls back to the Pretty or Raw view.
+**Preview** — For HTML responses, shows an **Open in browser** button: the HTML is written to a private temp file and opened in your system browser with scripts blocked. Non-HTML content falls back to the Pretty or Raw view.
 
-A **Copy** button copies the full response body text to the clipboard.
+**Copy** copies the shown body to the clipboard and **Save** writes it to a file.
 
 ### Headers
 
@@ -55,17 +55,14 @@ A visual waterfall breakdown of request timing:
 
 | Phase | Color | Description |
 |---|---|---|
-| DNS | Purple | DNS resolution time |
-| TCP | Blue | TCP connection time |
-| TLS | Yellow | TLS handshake time |
 | TTFB | Green | Time to first byte (server processing) |
 | Download | Indigo | Response download time |
 
-Each phase is shown as a proportionally-sized horizontal bar. Total time is displayed prominently at the top.
+Only TTFB and download are measured; DNS, TCP and TLS are not broken out (they are reported as 0). Each phase is shown as a proportionally-sized horizontal bar. Total time is displayed prominently at the top.
 
 ### Visualize
 
-Available when a post-response script calls `nx.visualizer.set(template, data)`. Renders custom HTML output in a sandboxed iframe. See [Response Visualization](../scripting/visualization.md).
+Available when a post-response script calls `nx.visualizer.set(template, data)`. Opens the custom HTML output in your system browser (network access blocked). See [Response Visualization](../scripting/visualization.md).
 
 ## Content Type Detection
 
@@ -74,7 +71,7 @@ Nexus automatically detects the response format from the `Content-Type` header:
 | Content-Type | Format | Pretty View Behavior |
 |---|---|---|
 | `application/json` | JSON | Pretty-printed with indentation |
-| `text/html` | HTML | Preview available in iframe |
+| `text/html` | HTML | Preview opens in the system browser |
 | `text/xml`, `application/xml` | XML | Displayed as text |
 | `image/*` | Image | Displayed as image |
 | `application/pdf` | PDF | Identified as PDF |
