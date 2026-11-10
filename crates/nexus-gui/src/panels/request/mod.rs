@@ -288,6 +288,8 @@ impl NexusApp {
             .map(|o| o.dir_name.clone())
         {
             self.untrusted_banner(ui, &dir);
+        } else if self.tabs.tabs[idx].untrusted_input {
+            self.untrusted_input_banner(ui, idx);
         }
 
         // sub tabs

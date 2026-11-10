@@ -19,8 +19,9 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderName, HeaderValue, Request};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
-use tokio_tungstenite::{connect_async, connect_async_tls_with_config, Connector};
+use tokio_tungstenite::{connect_async_tls_with_config, Connector};
 
 const MAX_MESSAGES: usize = 1000;
 /// The kept log holds at most this many bytes of message data (oldest evicted first).
@@ -28,7 +29,19 @@ pub const MAX_LOG_BYTES: usize = 16 * 1024 * 1024;
 /// Message data kept per message for display; `size` still reports the real length.
 pub const MAX_DISPLAY_BYTES: usize = 256 * 1024;
 
-/// Cuts `s` to at most `max` bytes on a char boundary and marks the cut.
+/// Largest incoming WebSocket message or frame accepted (tungstenite defaults to 64/16 MiB); a
+/// bigger one ends the connection with an error instead of being buffered.
+pub const MAX_INCOMING_WS_BYTES: usize = 4 * 1024 * 1024;
+
+/// Read limits for every WebSocket connection (this module and the GraphQL subscription client).
+pub fn ws_config() -> WebSocketConfig {
+    WebSocketConfig::default()
+        .max_message_size(Some(MAX_INCOMING_WS_BYTES))
+        .max_frame_size(Some(MAX_INCOMING_WS_BYTES))
+}
+
+/// Cuts `s` to at most `max` bytes on a char boundary and marks the cut. The result's capacity
+/// is trimmed to its length so a retained string does not keep the full original allocation.
 pub fn truncate_display(mut s: String, max: usize) -> String {
     if s.len() > max {
         let mut cut = max;
@@ -38,6 +51,7 @@ pub fn truncate_display(mut s: String, max: usize) -> String {
         s.truncate(cut);
         s.push_str("\n[message truncated]");
     }
+    s.shrink_to_fit();
     s
 }
 
@@ -463,9 +477,10 @@ async fn connect_and_serve(
     };
     let connecting = async {
         if opts.reject_unauthorized == Some(false) {
-            connect_async_tls_with_config(req, None, false, Some(insecure_connector())).await
+            connect_async_tls_with_config(req, Some(ws_config()), false, Some(insecure_connector()))
+                .await
         } else {
-            connect_async(req).await
+            connect_async_tls_with_config(req, Some(ws_config()), false, None).await
         }
     };
     tokio::pin!(connecting);

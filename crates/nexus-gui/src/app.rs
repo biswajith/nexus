@@ -313,7 +313,9 @@ impl NexusApp {
         if let Ok(m) = nexus_core::http::parse_method(&e.request.method) {
             r.method = m;
         }
-        self.tabs.open(r, None);
+        // History does not record whether the send was untrusted and stores the URL as sent, so
+        // a replayed entry is always treated as untrusted input.
+        self.tabs.open_untrusted(r);
         self.ui.active_panel = Panel::Http;
     }
 
@@ -360,6 +362,8 @@ impl NexusApp {
                     dir_name: dir.to_string(),
                     request_id: req.id,
                 });
+                // The collection's own trust now decides.
+                t.untrusted_input = false;
                 t.dirty = false;
             }
         }
@@ -386,11 +390,14 @@ impl NexusApp {
         }
     }
 
-    /// Whether the tab belongs to a collection the user has not trusted.
+    /// Whether the tab is untrusted input (cURL paste, history replay) or belongs to a
+    /// collection the user has not trusted.
     pub fn tab_untrusted(&self, tab: &crate::state::RequestTab) -> bool {
-        tab.origin
-            .as_ref()
-            .is_some_and(|o| self.collections.is_untrusted(&o.dir_name))
+        tab.untrusted_input
+            || tab
+                .origin
+                .as_ref()
+                .is_some_and(|o| self.collections.is_untrusted(&o.dir_name))
     }
 
     /// The loaded collection a tab was opened from or saved to.

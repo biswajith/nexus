@@ -18,6 +18,10 @@ pub struct RequestTab {
     pub id: String,
     pub request: NexusRequest,
     pub origin: Option<Origin>,
+    /// The request came from outside the user's trusted collections (a pasted cURL command or a
+    /// replayed history entry), so its `{{secret}}` placeholders must not resolve. Cleared only by
+    /// the user trusting the tab; saving into a collection hands the decision to that collection.
+    pub untrusted_input: bool,
     pub dirty: bool,
     pub response: Option<Resp>,
     pub loading: bool,
@@ -39,6 +43,7 @@ impl RequestTab {
             id: request.id.clone(),
             request,
             origin,
+            untrusted_input: false,
             dirty: false,
             response: None,
             loading: false,
@@ -51,6 +56,7 @@ impl RequestTab {
         SavedTab {
             request: self.request.clone(),
             origin: self.origin.clone(),
+            untrusted_input: self.untrusted_input,
             dirty: self.dirty,
         }
     }
@@ -78,6 +84,7 @@ impl Tabs {
             .map(|s| {
                 let mut t = RequestTab::new(s.request.clone(), s.origin.clone());
                 t.dirty = s.dirty;
+                t.untrusted_input = s.untrusted_input;
                 t
             })
             .collect();
@@ -129,6 +136,15 @@ impl Tabs {
         let id = tab.id.clone();
         self.tabs.push(tab);
         self.active = Some(id.clone());
+        id
+    }
+
+    /// Opens an origin-less tab for a request authored outside the user's collections.
+    pub fn open_untrusted(&mut self, request: NexusRequest) -> String {
+        let id = self.open(request, None);
+        if let Some(t) = self.tabs.iter_mut().find(|t| t.id == id) {
+            t.untrusted_input = true;
+        }
         id
     }
 
