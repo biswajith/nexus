@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::sync::oneshot;
-use tokio_tungstenite::connect_async;
+use tokio_tungstenite::connect_async_with_config;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -85,7 +85,7 @@ pub(super) async fn run(
 
     let mut ws = tokio::select! {
         _ = &mut stop => return,
-        res = connect_async(req) => match res {
+        res = connect_async_with_config(req, Some(crate::websocket::ws_config()), false) => match res {
             Ok((ws, _)) => ws,
             Err(e) => return sink(SubscriptionEvent::Error(e.to_string())),
         },

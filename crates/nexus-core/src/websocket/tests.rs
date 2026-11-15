@@ -480,3 +480,36 @@ fn huge_message_data_is_truncated_for_display() {
     assert!(t.starts_with("éé") && t.ends_with("[message truncated]"));
     assert_eq!(truncate_display("abc".into(), 5), "abc");
 }
+
+#[test]
+fn truncated_display_releases_the_original_allocation() {
+    let big = "x".repeat(2 * 1024 * 1024);
+    let t = truncate_display(big, MAX_DISPLAY_BYTES);
+    assert!(t.len() <= MAX_DISPLAY_BYTES + 32);
+    assert!(t.capacity() < 512 * 1024, "capacity {}", t.capacity());
+}
+
+#[test]
+fn ws_config_limits_message_and_frame_size() {
+    let c = ws_config();
+    assert_eq!(c.max_message_size, Some(MAX_INCOMING_WS_BYTES));
+    assert_eq!(c.max_frame_size, Some(MAX_INCOMING_WS_BYTES));
+}
+
+#[tokio::test]
+async fn oversize_incoming_message_ends_with_an_error_event() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (sock, _) = listener.accept().await.unwrap();
+        let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+        let _ = ws
+            .send(Message::text("y".repeat(MAX_INCOMING_WS_BYTES + 1)))
+            .await;
+        while ws.next().await.is_some() {}
+    });
+    let (c, mut rx) = client();
+    c.connect(opts(&url)).unwrap();
+    let seen = until(&mut rx, |e| matches!(e, WsEvent::Error(_))).await;
+    assert!(!seen.iter().any(|e| matches!(e, WsEvent::Message(_))));
+}

@@ -12,30 +12,86 @@ use serde_json::{json, Value};
 
 /// Absolute node budget for an imported YAML document (a 10 MB real spec is ~1-2M nodes).
 const MAX_YAML_NODES: usize = 4_000_000;
+/// Absolute ceiling on string bytes (values and map keys, after alias expansion) in an imported
+/// YAML document. The per-import budget is `8 * input + 1 MiB`, capped here; a real 10 MB spec
+/// holds well under its own size in strings, so it stays far inside the budget.
+const MAX_YAML_STRING_BYTES: usize = 64 * 1024 * 1024;
 /// Folders one operation is listed under at most (each copy clones the request).
 const MAX_TAGS_PER_OPERATION: usize = 32;
 const HTTP_METHODS: [&str; 7] = ["get", "post", "put", "patch", "delete", "head", "options"];
 
 /// Parses YAML into a JSON value, failing once the number of nodes (after alias expansion)
-/// exceeds a budget proportional to the input size. serde_yaml replays every alias, so a tiny
-/// file can otherwise expand to gigabytes ("billion laughs"); the budget stops it early.
+/// or the total string bytes exceed budgets proportional to the input size. serde_yaml replays
+/// every alias, so a tiny file can otherwise expand to gigabytes ("billion laughs", or one huge
+/// anchored string referenced thousands of times); the budgets stop it early.
 fn parse_yaml_bounded(data: &str) -> Result<Value> {
     use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
     use std::cell::Cell;
     use std::fmt;
 
-    struct Seed<'a>(&'a Cell<usize>);
+    /// Remaining (nodes, string bytes).
+    struct Budget {
+        nodes: Cell<usize>,
+        bytes: Cell<usize>,
+    }
+
+    struct Seed<'a>(&'a Budget);
+
+    /// Reads a map key as a `String`, charging its length before it is copied.
+    struct KeySeed<'a>(&'a Budget);
 
     impl<'a> Seed<'a> {
+        fn charge_bytes<E: serde::de::Error>(&self, n: usize) -> std::result::Result<(), E> {
+            charge_bytes(self.0, n)
+        }
+
         fn tick<E: serde::de::Error>(&self) -> std::result::Result<(), E> {
-            let left = self.0.get();
-            if left == 0 {
-                return Err(E::custom(
-                    "document expands to too many nodes (YAML aliases nest or repeat too much)",
-                ));
+            tick(self.0)
+        }
+    }
+
+    fn tick<E: serde::de::Error>(b: &Budget) -> std::result::Result<(), E> {
+        let left = b.nodes.get();
+        if left == 0 {
+            return Err(E::custom(
+                "document expands to too many nodes (YAML aliases nest or repeat too much)",
+            ));
+        }
+        b.nodes.set(left - 1);
+        Ok(())
+    }
+
+    fn charge_bytes<E: serde::de::Error>(b: &Budget, n: usize) -> std::result::Result<(), E> {
+        match b.bytes.get().checked_sub(n) {
+            Some(left) => {
+                b.bytes.set(left);
+                Ok(())
             }
-            self.0.set(left - 1);
-            Ok(())
+            None => Err(E::custom(
+                "document expands to too much text (YAML aliases repeat large strings)",
+            )),
+        }
+    }
+
+    impl<'de, 'a> DeserializeSeed<'de> for KeySeed<'a> {
+        type Value = String;
+        fn deserialize<D: serde::Deserializer<'de>>(
+            self,
+            d: D,
+        ) -> std::result::Result<String, D::Error> {
+            d.deserialize_str(self)
+        }
+    }
+
+    impl<'de, 'a> Visitor<'de> for KeySeed<'a> {
+        type Value = String;
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a string map key")
+        }
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<String, E> {
+            tick(self.0)?;
+            charge_bytes(self.0, v.len())?;
+            Ok(v.to_owned())
         }
     }
 
@@ -67,7 +123,9 @@ fn parse_yaml_bounded(data: &str) -> Result<Value> {
             self.tick::<E>().map(|()| Value::from(v))
         }
         fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Value, E> {
-            self.tick::<E>().map(|()| Value::from(v))
+            self.tick::<E>()?;
+            self.charge_bytes::<E>(v.len())?;
+            Ok(Value::from(v))
         }
         fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<Value, E> {
             self.tick::<E>().map(|()| Value::Null)
@@ -92,15 +150,22 @@ fn parse_yaml_bounded(data: &str) -> Result<Value> {
         fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Value, A::Error> {
             self.tick::<A::Error>()?;
             let mut out = serde_json::Map::new();
-            while let Some(k) = map.next_key::<String>()? {
-                self.tick::<A::Error>()?;
+            while let Some(k) = map.next_key_seed(KeySeed(self.0))? {
                 out.insert(k, map.next_value_seed(Seed(self.0))?);
             }
             Ok(Value::Object(out))
         }
     }
 
-    let budget = Cell::new((200_000 + data.len().saturating_mul(2)).min(MAX_YAML_NODES));
+    let budget = Budget {
+        nodes: Cell::new((200_000 + data.len().saturating_mul(2)).min(MAX_YAML_NODES)),
+        bytes: Cell::new(
+            data.len()
+                .saturating_mul(8)
+                .saturating_add(1 << 20)
+                .min(MAX_YAML_STRING_BYTES),
+        ),
+    };
     let de = serde_yaml::Deserializer::from_str(data);
     let mut docs = de.into_iter();
     let first = docs

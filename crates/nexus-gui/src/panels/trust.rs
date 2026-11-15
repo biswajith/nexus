@@ -51,6 +51,41 @@ impl NexusApp {
     }
 }
 
+impl NexusApp {
+    /// Draws the banner on an origin-less tab opened from a pasted cURL command or history;
+    /// "Trust this request" clears the flag.
+    pub(crate) fn untrusted_input_banner(&mut self, ui: &mut Ui, idx: usize) {
+        let text = "Imported or replayed request: secret variables are withheld and it can only read files you picked.";
+        let r = bar(ui, 38.0, warning_subtle(), Some(border()));
+        let btn_w = text_w(ui, "Trust this request", font(12.0, "Medium")) + 24.0;
+        sub(
+            ui,
+            r.shrink2(vec2(12.0, 0.0)),
+            Layout::right_to_left(Align::Center),
+            |ui| {
+                let trust = button(
+                    ui,
+                    "Trust this request",
+                    font(12.0, "Medium"),
+                    (12.0, 6.0),
+                    28.0,
+                    &BtnStyle::outline_accent(),
+                );
+                if trust.clicked() {
+                    self.tabs.tabs[idx].untrusted_input = false;
+                }
+            },
+        );
+        ui.painter().text(
+            vec2(r.left() + 12.0, r.center().y).to_pos2(),
+            Align2::LEFT_CENTER,
+            fit(ui, text, r.width() - btn_w - 36.0),
+            font(12.0, "Regular"),
+            warning(),
+        );
+    }
+}
+
 /// `text` shortened with an ellipsis to fit `max_w`.
 fn fit(ui: &Ui, text: &str, max_w: f32) -> String {
     if text_w(ui, text, font(12.0, "Regular")) <= max_w {

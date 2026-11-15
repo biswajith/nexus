@@ -52,6 +52,8 @@ pub struct SavedTab {
     pub request: NexusRequest,
     pub origin: Option<Origin>,
     #[serde(default)]
+    pub untrusted_input: bool,
+    #[serde(default)]
     pub dirty: bool,
 }
 

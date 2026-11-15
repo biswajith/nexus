@@ -519,6 +519,34 @@ fn yaml_alias_fanout_is_rejected_quickly() {
 }
 
 #[test]
+fn yaml_aliased_large_string_is_rejected_quickly() {
+    // A 100 KB anchored string referenced 3000 times: ~300 MB of text from ~120 KB of input,
+    // while the node count stays tiny.
+    let big = "a".repeat(100_000);
+    let mut y =
+        format!("openapi: 3.0.0\ninfo: {{title: T, version: '1'}}\nbase: &a \"{big}\"\nrefs:\n");
+    for _ in 0..3000 {
+        y.push_str("  - *a\n");
+    }
+    let start = std::time::Instant::now();
+    let err = import(&y).unwrap_err().to_string();
+    assert!(err.contains("too much text"), "{err}");
+    assert!(start.elapsed().as_secs() < 5);
+}
+
+#[test]
+fn yaml_aliased_large_map_key_is_rejected() {
+    let big = "k".repeat(100_000);
+    let mut y =
+        format!("openapi: 3.0.0\ninfo: {{title: T, version: '1'}}\nbase: &a \"{big}\"\nrefs:\n");
+    for i in 0..3000 {
+        y.push_str(&format!("  - {{ *a : {i} }}\n"));
+    }
+    let err = import(&y).unwrap_err().to_string();
+    assert!(err.contains("too much text"), "{err}");
+}
+
+#[test]
 fn yaml_with_aliases_still_imports() {
     let y = "openapi: 3.0.0\ninfo: {title: T, version: '1'}\nx: &a [1, 2]\ny: *a\npaths: {}\n";
     assert_eq!(import(y).unwrap().collections[0].name, "T");
@@ -560,4 +588,66 @@ fn large_but_plain_yaml_still_imports_under_the_node_cap() {
     let y =
         format!("openapi: 3.0.0\ninfo: {{title: Big, version: '1'}}\nx: [{items}]\npaths: {{}}\n");
     assert_eq!(import(&y).unwrap().collections[0].name, "Big");
+}
+
+#[test]
+fn yaml_unquoted_scalar_map_keys_match_quoted_keys() {
+    let unquoted = "
+openapi: \"3.0.0\"
+info:
+  title: Keys
+  version: \"1.0\"
+paths:
+  /ping:
+    get:
+      summary: Ping
+      responses:
+        200:
+          description: OK
+        404:
+          description: Missing
+        1.5:
+          description: Odd
+        true:
+          description: Bool
+        ~:
+          description: Null
+        default:
+          description: Other
+";
+    let quoted = "
+openapi: \"3.0.0\"
+info:
+  title: Keys
+  version: \"1.0\"
+paths:
+  /ping:
+    get:
+      summary: Ping
+      responses:
+        \"200\":
+          description: OK
+        \"404\":
+          description: Missing
+        \"1.5\":
+          description: Odd
+        \"true\":
+          description: Bool
+        \"null\":
+          description: Null
+        default:
+          description: Other
+";
+    let r = import(unquoted).unwrap();
+    assert_eq!(r.collections[0].name, "Keys");
+    assert_eq!(first(&r).name, "Ping");
+    let a = parse_yaml_bounded(unquoted).unwrap();
+    let responses = &a["paths"]["/ping"]["get"]["responses"];
+    assert_eq!(responses["200"]["description"], "OK");
+    assert_eq!(responses["404"]["description"], "Missing");
+    assert_eq!(responses["default"]["description"], "Other");
+    // Same result as the old `next_key::<String>()` path / serde_yaml's own Value parse.
+    let plain: Value = serde_yaml::from_str(unquoted).unwrap();
+    assert_eq!(a, plain);
+    let _ = parse_yaml_bounded(quoted).unwrap();
 }

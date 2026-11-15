@@ -241,3 +241,26 @@ impl GqlState {
         self.type_view_for = None;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_subscription_events_do_not_keep_excess_capacity() {
+        let mut st = GqlState::default();
+        let mut big = String::with_capacity(4 * 1024 * 1024);
+        big.push_str(&"x".repeat(2 * 1024 * 1024));
+        st.add_sub(0, big, false);
+        let e = st.sub_events.last().unwrap();
+        assert!(
+            e.text.capacity() < 512 * 1024,
+            "capacity {}",
+            e.text.capacity()
+        );
+        let mut small = String::with_capacity(1024 * 1024);
+        small.push_str("{}");
+        st.add_sub(0, small, false);
+        assert!(st.sub_events.last().unwrap().text.capacity() < 1024);
+    }
+}
